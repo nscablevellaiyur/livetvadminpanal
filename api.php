@@ -1,6 +1,5 @@
-
 <?php
-require_once DIR . '/includes/json_db.php';
+require_once __DIR__ . '/includes/json_db.php';
 
 header("Content-Type: application/json; charset=utf-8");
 
@@ -14,9 +13,6 @@ $response = [
 
 switch ($action) {
 
-    // ------------------------------
-    // Fetch Categories
-    // ------------------------------
     case "categories":
         $categories = json_load("categories", []);
         $categories = array_values(array_filter($categories, fn($c) => $c["status"] == 1));
@@ -28,9 +24,6 @@ switch ($action) {
         echo json_encode($response);
         break;
 
-    // ------------------------------
-    // Fetch Live TV
-    // ------------------------------
     case "live_tv":
         $categoryId = isset($_GET["category_id"]) ? (int)$_GET["category_id"] : 0;
         $channels = json_load("live_tv", []);
