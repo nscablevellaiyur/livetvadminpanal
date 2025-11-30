@@ -1,15 +1,15 @@
-# Use official PHP image with Apache
 FROM php:8.2-apache
 
-# Enable PHP extensions if needed
-RUN docker-php-ext-install mysqli pdo pdo_mysql
-
-# Copy project files to Apache web root
 COPY . /var/www/html/
 
-# Give permissions
-RUN chmod -R 0777 /var/www/html/data
-RUN chmod -R 0777 /var/www/html/uploads
+# Create folders if they don't exist
+RUN mkdir -p /var/www/html/data \
+    && mkdir -p /var/www/html/uploads \
+    && mkdir -p /var/www/html/uploads/category \
+    && mkdir -p /var/www/html/uploads/live
 
-# Expose Apache port
+# Set permissions
+RUN chmod -R 0777 /var/www/html/data \
+    && chmod -R 0777 /var/www/html/uploads
+
 EXPOSE 80
