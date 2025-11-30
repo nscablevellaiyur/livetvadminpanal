@@ -4,161 +4,265 @@ header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Headers: *");
 header("Access-Control-Allow-Methods: POST, GET, OPTIONS");
 
-define('ROOT', "NEMOSOFTS_APP");
 define('DATA_DIR', __DIR__ . '/data');
 
-function load($file, $default=[]) {
-    $path = DATA_DIR . '/' . $file;
+function read_json_file($filename, $default = []) {
+    $path = DATA_DIR . '/' . $filename;
     if (!file_exists($path)) return $default;
-    $x = json_decode(file_get_contents($path), true);
-    return $x ?: $default;
+
+    $data = json_decode(file_get_contents($path), true);
+    return $data ?: $default;
 }
 
-function output($array) {
-    echo json_encode([ ROOT => [$array] ], JSON_UNESCAPED_SLASHES);
+function write_json_file($filename, $data) {
+    file_put_contents(DATA_DIR . '/' . $filename, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+}
+
+function response_nemosoft($arr) {
+    echo json_encode(["NEMOSOFTS_APP" => [$arr]], JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
     exit;
 }
 
-/* Load JSON Data */
-$settings   = load("settings.json", []);
-$categories = load("categories.json", []);
-$live       = load("live_tv.json", []);
-$sections   = load("sections.json", []);
-$banners    = load("banners.json", []);
-$events     = load("events.json", []);
-
-$action = $_REQUEST["action"] ?? "";
-
-/* ---------------- NEMOSOFT FORMAT HELPERS ---------------- */
-
-function ok($payload) {
-    $base = [
-        "success"       => "1",
-        "verifyStatus"  => "1",
-        "MSG"           => "",
-    ];
-    output(array_merge($base, $payload));
-}
-
-function error($msg) {
-    $base = [
-        "success"       => "0",
-        "verifyStatus"  => "-1",
-        "MSG"           => $msg,
-    ];
-    output($base);
-}
-
-/* ---------------- APP DETAILS ---------------- */
-
-if ($action == "app_details") {
-
-    if (!$settings) error("settings_not_found");
-
-    ok($settings);
-}
-
-/* ---------------- CATEGORY LIST ---------------- */
-
-if ($action == "cat_list") {
-
-    ok([
-        "category" => array_values(
-            array_filter($categories, fn($c)=>intval($c["status"] ?? 1)==1 )
-        )
+function success($message, $data = []) {
+    response_nemosoft([
+        "success" => "1",
+        "verifyStatus" => "1",
+        "MSG" => "",
+        "message" => $message,
+        "data" => $data
     ]);
 }
 
-/* ---------------- LATEST ---------------- */
-
-if ($action == "get_latest") {
-
-    $latest = array_values(
-        array_filter($live, fn($ch)=>intval($ch["status"] ?? 1)==1)
-    );
-
-    usort($latest, fn($a,$b)=>intval($b["id"]) <=> intval($a["id"]));
-
-    ok([ "live" => $latest ]);
+function error($msg) {
+    response_nemosoft([
+        "success" => "0",
+        "verifyStatus" => "-1",
+        "MSG" => $msg,
+        "data" => []
+    ]);
 }
 
-/* ---------------- HOME SECTIONS ---------------- */
+// Load all JSON tables
+$settings    = read_json_file('settings.json', []);
+$categories  = read_json_file('categories.json', []);
+$liveTV      = read_json_file('live_tv.json', []);
+$sections    = read_json_file('sections.json', []);
+$banners     = read_json_file('banners.json', []);
+$events      = read_json_file('events.json', []);
+$users       = read_json_file('users.json', []);
+$subs        = read_json_file('subscriptions.json', []);
+$suggestions = read_json_file('suggestions.json', []);
+$reports     = read_json_file('reports.json', []);
 
-if ($action == "get_home") {
+$action = $_REQUEST['action'] ?? '';
 
-    $home = [];
+$payload = null;
+if (isset($_POST['data'])) {
+    $decoded = json_decode($_POST['data'], true);
+    if (json_last_error() === JSON_ERROR_NONE) {
+        $payload = $decoded;
+    }
+}
+
+// Helper: fetch channels by ID
+function get_live_by_ids($all, $ids) {
+    $map = [];
+    foreach ($all as $ch) $map[$ch['id']] = $ch;
+
+    $out = [];
+    foreach ($ids as $id) {
+        if (isset($map[$id])) $out[] = $map[$id];
+    }
+    return $out;
+}
+
+// ==========================
+// ACTION HANDLERS
+// ==========================
+
+// 1) APP DETAILS (NEMOSOFT FORMAT)
+if ($action === "app_details") {
+
+    if (empty($settings)) {
+        error("settings_not_found");
+    }
+
+    // Force required fields for Nemosoft launcher
+    $settings["success"] = "1";
+    $settings["verifyStatus"] = "1";
+    $settings["MSG"] = "";
+
+    response_nemosoft($settings);
+}
+
+// 2) CATEGORY LIST
+if ($action === "cat_list" || $action === "categories") {
+    $active = array_values(array_filter($categories, fn($c) => !isset($c['status']) || $c['status'] == 1));
+    success("category_list", $active);
+}
+
+// 3) LIVE TV LIST / CATEGORY FILTER
+if ($action === "get_cat_by" || $action === "live_list") {
+
+    $catId = $_REQUEST['cat_id'] ?? ($payload['cat_id'] ?? null);
+
+    $list = array_values(array_filter($liveTV, function($ch) use ($catId) {
+        if (isset($ch['status']) && $ch['status'] != 1) return false;
+        if ($catId) return $ch['category_id'] == $catId;
+        return true;
+    }));
+
+    success("live_list", $list);
+}
+
+// 4) LATEST CHANNELS
+if ($action === "get_latest") {
+
+    $list = array_values(array_filter($liveTV, fn($ch) => !isset($ch['status']) || $ch['status'] == 1));
+
+    usort($list, fn($a,$b) => $b['id'] <=> $a['id']);
+
+    $limit = $settings["api_latest_limit"] ?? 20;
+    $list = array_slice($list, 0, $limit);
+
+    success("latest", $list);
+}
+
+// 5) HOME SECTIONS
+if ($action === "get_home") {
+
+    $result = [];
 
     foreach ($sections as $sec) {
-        $ids = $sec["channel_ids"] ?? [];
-        $list = [];
-
-        foreach ($live as $ch) {
-            if (in_array($ch["id"], $ids)) $list[] = $ch;
-        }
-
-        $home[] = [
-            "section_name" => $sec["title"],
-            "section_type" => $sec["type"],
-            "post"         => $list
+        $result[] = [
+            "type" => $sec['type'],
+            "title" => $sec['title'],
+            "channel" => get_live_by_ids($liveTV, $sec['channel_ids'])
         ];
     }
 
-    ok([ "home" => $home ]);
+    success("home", $result);
 }
 
-/* ---------------- LIVE BY CATEGORY ---------------- */
-
-if ($action == "get_cat_by") {
-
-    $cid = intval($_REQUEST["cat_id"] ?? 0);
-
-    $channels = array_values(
-        array_filter($live, fn($c)=>intval($c["category_id"]) == $cid)
-    );
-
-    ok(["live" => $channels]);
+// 6) BANNERS
+if ($action === "get_banner_by") {
+    success("banner_list", $banners);
 }
 
-/* ---------------- SINGLE LIVE ID ---------------- */
-
-if ($action == "get_live_id") {
-
-    $id = intval($_REQUEST["id"] ?? 0);
-
-    $found = array_values(
-        array_filter($live, fn($c)=>intval($c["id"]) == $id)
-    );
-
-    ok(["live" => $found]);
+// 7) EVENTS
+if ($action === "get_event") {
+    success("event_list", $events);
 }
 
-/* ---------------- BANNER ---------------- */
+// 8) SEARCH
+if ($action === "get_search" || $action === "search") {
 
-if ($action == "get_banner_by") {
-    ok(["banner" => $banners]);
+    $term = strtolower($_REQUEST['search_text'] ?? ($payload['search_text'] ?? ""));
+
+    $matches = array_values(array_filter($liveTV, function($ch) use ($term) {
+        return $term === "" || strpos(strtolower($ch['name']), $term) !== false;
+    }));
+
+    success("search", $matches);
 }
 
-/* ---------------- EVENTS ---------------- */
+// 9) LOGIN
+if ($action === "user_login") {
 
-if ($action == "get_event") {
-    ok(["event" => $events]);
+    if (!$payload || !isset($payload["email"], $payload["password"])) {
+        error("missing_credentials");
+    }
+
+    $email = strtolower(trim($payload["email"]));
+    $pass = $payload["password"];
+
+    foreach ($users as $u) {
+        if ($u['email'] === $email && $u['password'] === $pass) {
+            success("login", [$u]);
+        }
+    }
+
+    error("invalid_login");
 }
 
-/* ---------------- SEARCH LIVE ---------------- */
+// 10) REGISTER
+if ($action === "user_register") {
 
-if ($action == "get_search_live") {
+    if (!$payload || !isset($payload["email"], $payload["password"], $payload["name"])) {
+        error("missing_registration_fields");
+    }
 
-    $q = strtolower($_REQUEST["search_text"] ?? "");
+    $email = strtolower(trim($payload["email"]));
 
-    $result = array_values(
-        array_filter($live, function($c) use($q){
-            return $q == "" || strpos(strtolower($c["name"]), $q) !== false;
-        })
-    );
+    foreach ($users as $u) {
+        if ($u["email"] === $email) error("email_exists");
+    }
 
-    ok(["live" => $result]);
+    $newId = empty($users) ? 1 : max(array_column($users, 'id')) + 1;
+
+    $newUser = [
+        "id" => $newId,
+        "name" => $payload["name"],
+        "email" => $email,
+        "password" => $payload["password"],
+        "status" => 1
+    ];
+
+    $users[] = $newUser;
+    write_json_file('users.json', $users);
+
+    success("register", [$newUser]);
 }
 
-/* ---------------- DEFAULT ---------------- */
+// 11) SUGGESTION
+if ($action === "post_suggest") {
 
+    if (!$payload || !isset($payload["user_id"], $payload["message"])) {
+        error("missing_suggestion_fields");
+    }
+
+    $newId = empty($suggestions) ? 1 : max(array_column($suggestions, 'id')) + 1;
+
+    $new = [
+        "id" => $newId,
+        "user_id" => $payload["user_id"],
+        "message" => $payload["message"],
+        "created" => date("Y-m-d H:i:s")
+    ];
+
+    $suggestions[] = $new;
+    write_json_file('suggestions.json', $suggestions);
+
+    success("suggestion_sent", [$new]);
+}
+
+// 12) REPORT
+if ($action === "post_report") {
+
+    if (!$payload || !isset($payload["channel_id"], $payload["user_id"], $payload["message"])) {
+        error("missing_report_fields");
+    }
+
+    $newId = empty($reports) ? 1 : max(array_column($reports, 'id')) + 1;
+
+    $new = [
+        "id" => $newId,
+        "channel_id" => $payload["channel_id"],
+        "user_id" => $payload["user_id"],
+        "message" => $payload["message"],
+        "created" => date("Y-m-d H:i:s")
+    ];
+
+    $reports[] = $new;
+    write_json_file('reports.json', $reports);
+
+    success("report_sent", [$new]);
+}
+
+// 13) SUBSCRIPTIONS
+if ($action === "subscription_list") {
+    success("subscription_list", $subs);
+}
+
+// DEFAULT
 error("unknown_action");
