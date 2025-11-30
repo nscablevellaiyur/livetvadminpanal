@@ -1,1 +1,14 @@
-[]
+[
+  {
+    "id": 1,
+    "banner_image": "uploads/banners/newyear.png",
+    "banner_url": "https://yourwebsite.com/promo",
+    "type": "external"   
+  },
+  {
+    "id": 2,
+    "banner_image": "uploads/banners/offer.png",
+    "banner_url": "https://yourwebsite.com",
+    "type": "external"
+  }
+]
