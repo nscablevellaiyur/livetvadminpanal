@@ -3,7 +3,7 @@ require_once __DIR__ . '/includes/json_db.php';
 
 header("Content-Type: application/json; charset=utf-8");
 
-// Base API format
+// Base response structure
 function baseResponse() {
     return [
         "API_NAME"    => "NEMOSOFTS_APP",
@@ -15,11 +15,10 @@ function baseResponse() {
     ];
 }
 
+$response = baseResponse();
 $action = $_GET["action"] ?? "";
 
-$response = baseResponse();
-
-// Load all JSON files once
+// Load all JSON files
 $categories    = json_load("categories", []);
 $live          = json_load("live_tv", []);
 $sections      = json_load("sections", []);
@@ -36,28 +35,23 @@ foreach ($live as &$c) {
         unset($c["stream_url"]);
     }
 }
+unset($c);
 
 switch ($action) {
 
-    // ---------------------------------------------------------
-    // SETTINGS
-    // ---------------------------------------------------------
+    /* -------------------------- SETTINGS -------------------------- */
     case "settings":
         $response["message"] = "settings";
         $response["data"] = $settings;
         break;
 
-    // ---------------------------------------------------------
-    // CATEGORIES
-    // ---------------------------------------------------------
+    /* ------------------------- CATEGORIES ------------------------- */
     case "categories":
         $response["message"] = "category_list";
         $response["data"] = array_values(array_filter($categories, fn($c) => $c["status"] == 1));
         break;
 
-    // ---------------------------------------------------------
-    // LIVE TV BY CATEGORY
-    // ---------------------------------------------------------
+    /* -------------------------- LIVE TV --------------------------- */
     case "live_tv":
         $catId = isset($_GET["category_id"]) ? (int)$_GET["category_id"] : 0;
 
@@ -71,83 +65,67 @@ switch ($action) {
         $response["data"] = $filtered;
         break;
 
-    // ---------------------------------------------------------
-    // BANNERS (Home Slider)
-    // ---------------------------------------------------------
+    /* ------------------------- BANNERS ---------------------------- */
     case "banners":
         $response["message"] = "banners";
         $response["data"] = $banners;
         break;
 
-    // ---------------------------------------------------------
-    // SECTIONS (Featured / Latest)
-    // ---------------------------------------------------------
+    /* ------------------------- SECTIONS --------------------------- */
     case "sections":
         $response["message"] = "sections";
         $response["data"] = $sections;
         break;
 
-    // ---------------------------------------------------------
-    // FEATURED
-    // ---------------------------------------------------------
+    /* ------------------------- FEATURED --------------------------- */
     case "featured":
-        $featuredSection = array_filter($sections, fn($s) => $s["type"] === "featured");
-        $ids = $featuredSection ? array_values($featuredSection)[0]["channel_ids"] : [];
+        $ids = [];
+
+        foreach ($sections as $sec) {
+            if (strtolower($sec["type"]) === "featured") {
+                $ids = $sec["channel_ids"] ?? [];
+                break;
+            }
+        }
 
         $response["message"] = "featured";
         $response["data"] = array_values(array_filter($live, fn($c) => in_array($c["id"], $ids)));
         break;
 
-    // ---------------------------------------------------------
-    // LATEST
-    // ---------------------------------------------------------
-  case "latest":
+    /* --------------------------- LATEST --------------------------- */
+    case "latest":
+        $ids = [];
 
-    // Accept all possible names Android might use
-    $latestSection = array_filter($sections, function($s) {
-        return in_array($s["type"], [
-            "latest",
-            "latest_channels",
-            "latest_tv",
-            "recent",
-            "recently_added"
-        ]);
-    });
+        foreach ($sections as $sec) {
+            if (strtolower($sec["type"]) === "latest") {
+                $ids = $sec["channel_ids"] ?? [];
+                break;
+            }
+        }
 
-    $ids = $latestSection ? array_values($latestSection)[0]["channel_ids"] : [];
+        $response["message"] = "latest";
+        $response["data"] = array_values(array_filter($live, fn($c) => in_array($c["id"], $ids)));
+        break;
 
-    $response["message"] = "latest";
-    $response["data"] = array_values(array_filter($live, fn($c) => in_array($c["id"], $ids)));
-    break;
-
-
-    // ---------------------------------------------------------
-    // EVENTS
-    // ---------------------------------------------------------
+    /* --------------------------- EVENTS --------------------------- */
     case "events":
         $response["message"] = "events";
         $response["data"] = $events;
         break;
 
-    // ---------------------------------------------------------
-    // SUGGESTIONS
-    // ---------------------------------------------------------
+    /* ------------------------ SUGGESTIONS ------------------------- */
     case "suggestions":
         $response["message"] = "suggestions";
         $response["data"] = $suggestions;
         break;
 
-    // ---------------------------------------------------------
-    // SUBSCRIPTIONS
-    // ---------------------------------------------------------
+    /* ----------------------- SUBSCRIPTIONS ------------------------ */
     case "subscriptions":
         $response["message"] = "subscriptions";
         $response["data"] = $subscriptions;
         break;
 
-    // ---------------------------------------------------------
-    // HOME (sections + banners)
-    // ---------------------------------------------------------
+    /* ---------------------------- HOME ---------------------------- */
     case "home":
         $response["message"] = "home";
         $response["data"] = [
@@ -156,13 +134,11 @@ switch ($action) {
         ];
         break;
 
-    // ---------------------------------------------------------
-    // INVALID ACTION
-    // ---------------------------------------------------------
+    /* ---------------------- INVALID ACTION ------------------------ */
     default:
         $response = baseResponse();
-        $response["success"] = "0";
         $response["status"]  = "failed";
+        $response["success"] = "0";
         $response["message"] = "invalid_action";
 }
 
