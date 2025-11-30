@@ -2,12 +2,19 @@
   "app_email": "support@yourapp.com",
   "app_author": "Your Name",
   "app_contact": "+91 9000000000",
-  "app_website": "https://live-tv-json.onrender.com",
-  "app_description": "Best Online Live TV App",
+  "app_website": "https://yourwebsite.com",
+  "app_description": "Online Live TV App",
   "app_developed_by": "Your Company",
   "more_apps_url": "",
 
-  "envato_api_key": "abc123xyz", 
+  "purchase_code": "valid",
+  "envato_username": "demo",
+  "envato_api_key": "demo_api_key_123",
+  "item_id": "123456",
+  "package_name": "nemosofts.online.live",
+  "app_version": "10.3",
+  "license_url": "https://google.com",
+  "verify_status": "1",
 
   "api_latest_limit": "20",
 
