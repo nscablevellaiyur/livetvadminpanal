@@ -35,26 +35,32 @@ switch ($action) {
     // ----------------------------------------------------------------------
     // 2️⃣ LIVE TV BY CATEGORY
     // ----------------------------------------------------------------------
-    case "live_tv":
+   case "live_tv":
 
-        $categoryId = isset($_GET["category_id"])
-            ? (int)$_GET["category_id"]
-            : 0;
+    $categoryId = isset($_GET["category_id"]) ? (int)$_GET["category_id"] : 0;
+    $live = json_load("live_tv", []);
 
-        $live = json_load("live_tv", []);
+    // Filter active channels
+    $live = array_values(array_filter($live, function($c) use ($categoryId) {
+        if ($c["status"] != 1) return false;
+        if ($categoryId > 0 && $c["category_id"] != $categoryId) return false;
+        return true;
+    }));
 
-        // Filter active channels
-        $live = array_values(array_filter($live, function($c) use ($categoryId) {
-            if ($c["status"] != 1) return false;
-            if ($categoryId > 0 && $c["category_id"] != $categoryId) return false;
-            return true;
-        }));
+    // Convert stream_url -> url (Android requirement)
+    $live = array_map(function($c) {
+        if (isset($c["stream_url"])) {
+            $c["url"] = $c["stream_url"];
+            unset($c["stream_url"]);
+        }
+        return $c;
+    }, $live);
 
-        $response["message"] = "live_list";
-        $response["data"] = $live;
+    $response["message"] = "live_list";
+    $response["data"] = $live;
 
-        echo json_encode($response);
-        break;
+    echo json_encode($response);
+    break;
 
 
     // ----------------------------------------------------------------------
