@@ -4,5 +4,4 @@ services:
     env: docker
     plan: free
     dockerfilePath: ./Dockerfile
-    buildCommand: ""
     startCommand: "apache2-foreground"
