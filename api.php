@@ -3,72 +3,155 @@ require_once __DIR__ . '/includes/json_db.php';
 
 header("Content-Type: application/json; charset=utf-8");
 
-// Global API response format expected by Android app
-$response = [
-    "API_NAME"     => "NEMOSOFTS_APP",   // Required by app
-    "status"       => "success",         // Required
-    "success"      => "1",               // Required
-    "message"      => "",
-    "server_time"  => gmdate("Y-m-d H:i:s"),
-    "data"         => []
-];
+// Base API format
+function baseResponse() {
+    return [
+        "API_NAME"    => "NEMOSOFTS_APP",
+        "status"      => "success",
+        "success"     => "1",
+        "message"     => "",
+        "server_time" => gmdate("Y-m-d H:i:s"),
+        "data"        => []
+    ];
+}
 
 $action = $_GET["action"] ?? "";
 
+$response = baseResponse();
+
+// Load all JSON files once
+$categories    = json_load("categories", []);
+$live          = json_load("live_tv", []);
+$sections      = json_load("sections", []);
+$banners       = json_load("banners", []);
+$events        = json_load("events", []);
+$suggestions   = json_load("suggestions", []);
+$subscriptions = json_load("subscriptions", []);
+$settings      = json_load("settings", []);
+
+// Convert stream_url → url
+foreach ($live as &$c) {
+    if (isset($c["stream_url"])) {
+        $c["url"] = $c["stream_url"];
+        unset($c["stream_url"]);
+    }
+}
+
 switch ($action) {
 
-    // ----------------------------------------------------------------------
-    // 1️⃣ CATEGORIES
-    // ----------------------------------------------------------------------
-    case "categories":
-
-        $categories = json_load("categories", []);
-        $categories = array_values(array_filter($categories, fn($c) => $c["status"] == 1));
-
-        $response["message"] = "category_list";
-        $response["data"] = $categories;
-
-        echo json_encode($response);
+    // ---------------------------------------------------------
+    // SETTINGS
+    // ---------------------------------------------------------
+    case "settings":
+        $response["message"] = "settings";
+        $response["data"] = $settings;
         break;
 
+    // ---------------------------------------------------------
+    // CATEGORIES
+    // ---------------------------------------------------------
+    case "categories":
+        $response["message"] = "category_list";
+        $response["data"] = array_values(array_filter($categories, fn($c) => $c["status"] == 1));
+        break;
 
-    // ----------------------------------------------------------------------
-    // 2️⃣ LIVE TV BY CATEGORY
-    // ----------------------------------------------------------------------
-   case "live_tv":
+    // ---------------------------------------------------------
+    // LIVE TV BY CATEGORY
+    // ---------------------------------------------------------
+    case "live_tv":
+        $catId = isset($_GET["category_id"]) ? (int)$_GET["category_id"] : 0;
 
-    $categoryId = isset($_GET["category_id"]) ? (int)$_GET["category_id"] : 0;
-    $live = json_load("live_tv", []);
+        $filtered = array_values(array_filter($live, function ($c) use ($catId) {
+            if ($c["status"] != 1) return false;
+            if ($catId > 0 && $c["category_id"] != $catId) return false;
+            return true;
+        }));
 
-    // Filter active channels
-    $live = array_values(array_filter($live, function($c) use ($categoryId) {
-        if ($c["status"] != 1) return false;
-        if ($categoryId > 0 && $c["category_id"] != $categoryId) return false;
-        return true;
-    }));
+        $response["message"] = "live_list";
+        $response["data"] = $filtered;
+        break;
 
-    // Convert stream_url -> url (Android requirement)
-    $live = array_map(function($c) {
-        if (isset($c["stream_url"])) {
-            $c["url"] = $c["stream_url"];
-            unset($c["stream_url"]);
-        }
-        return $c;
-    }, $live);
+    // ---------------------------------------------------------
+    // BANNERS (Home Slider)
+    // ---------------------------------------------------------
+    case "banners":
+        $response["message"] = "banners";
+        $response["data"] = $banners;
+        break;
 
-    $response["message"] = "live_list";
-    $response["data"] = $live;
+    // ---------------------------------------------------------
+    // SECTIONS (Featured / Latest)
+    // ---------------------------------------------------------
+    case "sections":
+        $response["message"] = "sections";
+        $response["data"] = $sections;
+        break;
 
-    echo json_encode($response);
-    break;
+    // ---------------------------------------------------------
+    // FEATURED
+    // ---------------------------------------------------------
+    case "featured":
+        $featuredSection = array_filter($sections, fn($s) => $s["type"] === "featured");
+        $ids = $featuredSection ? array_values($featuredSection)[0]["channel_ids"] : [];
 
+        $response["message"] = "featured";
+        $response["data"] = array_values(array_filter($live, fn($c) => in_array($c["id"], $ids)));
+        break;
 
-    // ----------------------------------------------------------------------
-    // 3️⃣ INVALID ACTION
-    // ----------------------------------------------------------------------
+    // ---------------------------------------------------------
+    // LATEST
+    // ---------------------------------------------------------
+    case "latest":
+        $latestSection = array_filter($sections, fn($s) => $s["type"] === "latest");
+        $ids = $latestSection ? array_values($latestSection)[0]["channel_ids"] : [];
+
+        $response["message"] = "latest";
+        $response["data"] = array_values(array_filter($live, fn($c) => in_array($c["id"], $ids)));
+        break;
+
+    // ---------------------------------------------------------
+    // EVENTS
+    // ---------------------------------------------------------
+    case "events":
+        $response["message"] = "events";
+        $response["data"] = $events;
+        break;
+
+    // ---------------------------------------------------------
+    // SUGGESTIONS
+    // ---------------------------------------------------------
+    case "suggestions":
+        $response["message"] = "suggestions";
+        $response["data"] = $suggestions;
+        break;
+
+    // ---------------------------------------------------------
+    // SUBSCRIPTIONS
+    // ---------------------------------------------------------
+    case "subscriptions":
+        $response["message"] = "subscriptions";
+        $response["data"] = $subscriptions;
+        break;
+
+    // ---------------------------------------------------------
+    // HOME (sections + banners)
+    // ---------------------------------------------------------
+    case "home":
+        $response["message"] = "home";
+        $response["data"] = [
+            "banners"  => $banners,
+            "sections" => $sections
+        ];
+        break;
+
+    // ---------------------------------------------------------
+    // INVALID ACTION
+    // ---------------------------------------------------------
     default:
-        $response["message"] = "invalid_action";
+        $response = baseResponse();
         $response["success"] = "0";
         $response["status"]  = "failed";
-        echo json_encode($response);
+        $response["message"] = "invalid_action";
 }
+
+echo json_encode($response);
