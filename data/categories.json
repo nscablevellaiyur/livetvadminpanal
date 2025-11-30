@@ -1,1 +1,20 @@
-[]
+[
+  {
+    "id": 1,
+    "name": "Entertainment",
+    "image": "uploads/category/entertainment.png",
+    "status": 1
+  },
+  {
+    "id": 2,
+    "name": "Tamil",
+    "image": "uploads/category/tamil.png",
+    "status": 1
+  },
+  {
+    "id": 3,
+    "name": "Kids",
+    "image": "uploads/category/kids.png",
+    "status": 1
+  }
+]
