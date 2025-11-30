@@ -1,1 +1,10 @@
-[]
+[
+  {
+     "id": 1,
+     "name": "Sun TV",
+     "logo": "uploads/live/suntv.png",
+     "stream_url": "http://...",
+     "category_id": 2,
+     "status": 1
+  }
+]
