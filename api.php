@@ -101,13 +101,25 @@ switch ($action) {
     // ---------------------------------------------------------
     // LATEST
     // ---------------------------------------------------------
-    case "latest":
-        $latestSection = array_filter($sections, fn($s) => $s["type"] === "latest");
-        $ids = $latestSection ? array_values($latestSection)[0]["channel_ids"] : [];
+  case "latest":
 
-        $response["message"] = "latest";
-        $response["data"] = array_values(array_filter($live, fn($c) => in_array($c["id"], $ids)));
-        break;
+    // Accept all possible names Android might use
+    $latestSection = array_filter($sections, function($s) {
+        return in_array($s["type"], [
+            "latest",
+            "latest_channels",
+            "latest_tv",
+            "recent",
+            "recently_added"
+        ]);
+    });
+
+    $ids = $latestSection ? array_values($latestSection)[0]["channel_ids"] : [];
+
+    $response["message"] = "latest";
+    $response["data"] = array_values(array_filter($live, fn($c) => in_array($c["id"], $ids)));
+    break;
+
 
     // ---------------------------------------------------------
     // EVENTS
