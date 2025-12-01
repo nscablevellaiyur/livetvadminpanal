@@ -1,15 +1,22 @@
 <?php
-
 header('Content-Type: application/json');
 
-$rootKey = "NEMOSOFTS_APP";   // Must match API_NAME in gradle.properties
-$action = isset($_GET['action']) ? $_GET['action'] : '';
+// Main JSON root key (matches BuildConfig.API_NAME)
+$ROOT = "NEMOSOFTS_APP";
 
-function sendResponse($success, $msg, $data = []) {
-    global $rootKey;
+// Load JSON files
+$categories = json_decode(file_get_contents("data/categories.json"), true);
+$live_tv    = json_decode(file_get_contents("data/live_tv.json"), true);
+$sections   = json_decode(file_get_contents("data/sections.json"), true);
+$banners    = file_exists("data/banners.json") ? json_decode(file_get_contents("data/banners.json"), true) : [];
 
+$action = isset($_GET['action']) ? $_GET['action'] : "";
+
+// Response format
+function response($success, $msg, $data = []) {
+    global $ROOT;
     echo json_encode([
-        $rootKey => [
+        $ROOT => [
             [
                 "success" => $success,
                 "MSG" => $msg,
@@ -20,113 +27,118 @@ function sendResponse($success, $msg, $data = []) {
     exit;
 }
 
-// Load JSON files
-$categories = json_decode(file_get_contents("data/categories.json"), true);
-$live_tv    = json_decode(file_get_contents("data/live_tv.json"), true);
-$sections   = json_decode(file_get_contents("data/sections.json"), true);
-
-
-// ACTION: HOME (Featured, Latest, etc.)
+//////////////////////////////////////////////////////
+// ACTION: HOME (Sections)
+//////////////////////////////////////////////////////
 if ($action == "home") {
+    $result = [];
 
-    $homeData = [];
+    foreach ($sections as $sec) {
 
-    foreach ($sections as $section) {
+        $list = [];
 
-        $channels = [];
-
-        foreach ($section['channel_ids'] as $id) {
+        foreach ($sec['channel_ids'] as $id) {
             foreach ($live_tv as $ch) {
                 if ($ch['id'] == $id && $ch['status'] == 1) {
-                    $channels[] = $ch;
+                    $list[] = $ch;
                 }
             }
         }
 
-        $homeData[] = [
-            "type" => $section['type'],
-            "title" => $section['title'],
-            "list" => $channels
+        $result[] = [
+            "type" => $sec['type'],
+            "title" => $sec['title'],
+            "list" => $list
         ];
     }
 
-    sendResponse(1, "success", $homeData);
+    // Attach banners if exist
+    if (!empty($banners)) {
+        $result[] = [
+            "type" => "banner",
+            "title" => "Banners",
+            "list" => $banners
+        ];
+    }
+
+    response(1, "success", $result);
 }
 
-
-
+//////////////////////////////////////////////////////
 // ACTION: CATEGORY LIST
+//////////////////////////////////////////////////////
 if ($action == "category") {
-    $active = array_filter($categories, fn($c) => $c['status'] == 1);
-    sendResponse(1, "success", array_values($active));
+    $active = array_filter($categories, function($cat) {
+        return $cat['status'] == 1;
+    });
+    response(1, "success", array_values($active));
 }
 
-
-
-// ACTION: LIVE TV LIST
+//////////////////////////////////////////////////////
+// ACTION: LIVE TV BY CATEGORY
+//////////////////////////////////////////////////////
 if ($action == "live_tv") {
 
     if (!isset($_GET['category_id'])) {
-        sendResponse(0, "category_id required");
+        response(0, "category_id required");
     }
 
-    $cat_id = (int) $_GET['category_id'];
-
-    $filtered = [];
+    $cid = intval($_GET['category_id']);
+    $list = [];
 
     foreach ($live_tv as $ch) {
-        if ($ch['category_id'] == $cat_id && $ch['status'] == 1) {
-            $filtered[] = $ch;
+        if ($ch['category_id'] == $cid && $ch['status'] == 1) {
+            $list[] = $ch;
         }
     }
 
-    sendResponse(1, "success", $filtered);
+    response(1, "success", $list);
 }
 
-
-
-// ACTION: SINGLE TV DETAILS
+//////////////////////////////////////////////////////
+// ACTION: SINGLE TV
+//////////////////////////////////////////////////////
 if ($action == "single_tv") {
 
     if (!isset($_GET['id'])) {
-        sendResponse(0, "id required");
+        response(0, "id required");
     }
 
-    $id = (int) $_GET['id'];
+    $id = intval($_GET['id']);
 
     foreach ($live_tv as $ch) {
         if ($ch['id'] == $id) {
-            sendResponse(1, "success", [$ch]);
+            response(1, "success", [$ch]);
         }
     }
 
-    sendResponse(0, "not found");
+    response(0, "not found");
 }
 
-
-
+//////////////////////////////////////////////////////
 // ACTION: SEARCH
+//////////////////////////////////////////////////////
 if ($action == "search") {
 
     if (!isset($_GET['keyword'])) {
-        sendResponse(0, "keyword required");
+        response(0, "keyword required");
     }
 
-    $keyword = strtolower($_GET['keyword']);
+    $key = strtolower($_GET['keyword']);
     $result = [];
 
     foreach ($live_tv as $ch) {
-        if (strpos(strtolower($ch['name']), $keyword) !== false) {
+        if (strpos(strtolower($ch['name']), $key) !== false) {
             $result[] = $ch;
         }
     }
 
-    sendResponse(1, "success", $result);
+    response(1, "success", $result);
 }
 
-
-
-// DEFAULT (Unknown action)
-sendResponse(0, "unknown_action", []);
+//////////////////////////////////////////////////////
+// DEFAULT
+//////////////////////////////////////////////////////
+response(0, "unknown_action", []);
 
 ?>
