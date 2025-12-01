@@ -1,268 +1,132 @@
 <?php
-header('Content-Type: application/json; charset=utf-8');
-header("Access-Control-Allow-Origin: *");
-header("Access-Control-Allow-Headers: *");
-header("Access-Control-Allow-Methods: POST, GET, OPTIONS");
 
-define('DATA_DIR', __DIR__ . '/data');
+header('Content-Type: application/json');
 
-function read_json_file($filename, $default = []) {
-    $path = DATA_DIR . '/' . $filename;
-    if (!file_exists($path)) return $default;
+$rootKey = "NEMOSOFTS_APP";   // Must match API_NAME in gradle.properties
+$action = isset($_GET['action']) ? $_GET['action'] : '';
 
-    $data = json_decode(file_get_contents($path), true);
-    return $data ?: $default;
-}
+function sendResponse($success, $msg, $data = []) {
+    global $rootKey;
 
-function write_json_file($filename, $data) {
-    file_put_contents(DATA_DIR . '/' . $filename, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
-}
-
-function response_nemosoft($arr) {
-    echo json_encode(["NEMOSOFTS_APP" => [$arr]], JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
+    echo json_encode([
+        $rootKey => [
+            [
+                "success" => $success,
+                "MSG" => $msg,
+                "data" => $data
+            ]
+        ]
+    ], JSON_UNESCAPED_SLASHES);
     exit;
 }
 
-function success($message, $data = []) {
-    response_nemosoft([
-        "success" => "1",
-        "verifyStatus" => "1",
-        "MSG" => "",
-        "message" => $message,
-        "data" => $data
-    ]);
-}
+// Load JSON files
+$categories = json_decode(file_get_contents("data/categories.json"), true);
+$live_tv    = json_decode(file_get_contents("data/live_tv.json"), true);
+$sections   = json_decode(file_get_contents("data/sections.json"), true);
 
-function error($msg) {
-    response_nemosoft([
-        "success" => "0",
-        "verifyStatus" => "-1",
-        "MSG" => $msg,
-        "data" => []
-    ]);
-}
 
-// Load all JSON tables
-$settings    = read_json_file('settings.json', []);
-$categories  = read_json_file('categories.json', []);
-$liveTV      = read_json_file('live_tv.json', []);
-$sections    = read_json_file('sections.json', []);
-$banners     = read_json_file('banners.json', []);
-$events      = read_json_file('events.json', []);
-$users       = read_json_file('users.json', []);
-$subs        = read_json_file('subscriptions.json', []);
-$suggestions = read_json_file('suggestions.json', []);
-$reports     = read_json_file('reports.json', []);
+// ACTION: HOME (Featured, Latest, etc.)
+if ($action == "home") {
 
-$action = $_REQUEST['action'] ?? '';
+    $homeData = [];
 
-$payload = null;
-if (isset($_POST['data'])) {
-    $decoded = json_decode($_POST['data'], true);
-    if (json_last_error() === JSON_ERROR_NONE) {
-        $payload = $decoded;
-    }
-}
+    foreach ($sections as $section) {
 
-// Helper: fetch channels by ID
-function get_live_by_ids($all, $ids) {
-    $map = [];
-    foreach ($all as $ch) $map[$ch['id']] = $ch;
+        $channels = [];
 
-    $out = [];
-    foreach ($ids as $id) {
-        if (isset($map[$id])) $out[] = $map[$id];
-    }
-    return $out;
-}
+        foreach ($section['channel_ids'] as $id) {
+            foreach ($live_tv as $ch) {
+                if ($ch['id'] == $id && $ch['status'] == 1) {
+                    $channels[] = $ch;
+                }
+            }
+        }
 
-// ==========================
-// ACTION HANDLERS
-// ==========================
-
-// 1) APP DETAILS (NEMOSOFT FORMAT)
-if ($action === "app_details") {
-
-    if (empty($settings)) {
-        error("settings_not_found");
-    }
-
-    // Force required fields for Nemosoft launcher
-    $settings["success"] = "1";
-    $settings["verifyStatus"] = "1";
-    $settings["MSG"] = "";
-
-    response_nemosoft($settings);
-}
-
-// 2) CATEGORY LIST
-if ($action === "cat_list" || $action === "categories") {
-    $active = array_values(array_filter($categories, fn($c) => !isset($c['status']) || $c['status'] == 1));
-    success("category_list", $active);
-}
-
-// 3) LIVE TV LIST / CATEGORY FILTER
-if ($action === "get_cat_by" || $action === "live_list") {
-
-    $catId = $_REQUEST['cat_id'] ?? ($payload['cat_id'] ?? null);
-
-    $list = array_values(array_filter($liveTV, function($ch) use ($catId) {
-        if (isset($ch['status']) && $ch['status'] != 1) return false;
-        if ($catId) return $ch['category_id'] == $catId;
-        return true;
-    }));
-
-    success("live_list", $list);
-}
-
-// 4) LATEST CHANNELS
-if ($action === "get_latest") {
-
-    $list = array_values(array_filter($liveTV, fn($ch) => !isset($ch['status']) || $ch['status'] == 1));
-
-    usort($list, fn($a,$b) => $b['id'] <=> $a['id']);
-
-    $limit = $settings["api_latest_limit"] ?? 20;
-    $list = array_slice($list, 0, $limit);
-
-    success("latest", $list);
-}
-
-// 5) HOME SECTIONS
-if ($action === "get_home") {
-
-    $result = [];
-
-    foreach ($sections as $sec) {
-        $result[] = [
-            "type" => $sec['type'],
-            "title" => $sec['title'],
-            "channel" => get_live_by_ids($liveTV, $sec['channel_ids'])
+        $homeData[] = [
+            "type" => $section['type'],
+            "title" => $section['title'],
+            "list" => $channels
         ];
     }
 
-    success("home", $result);
+    sendResponse(1, "success", $homeData);
 }
 
-// 6) BANNERS
-if ($action === "get_banner_by") {
-    success("banner_list", $banners);
+
+
+// ACTION: CATEGORY LIST
+if ($action == "category") {
+    $active = array_filter($categories, fn($c) => $c['status'] == 1);
+    sendResponse(1, "success", array_values($active));
 }
 
-// 7) EVENTS
-if ($action === "get_event") {
-    success("event_list", $events);
-}
 
-// 8) SEARCH
-if ($action === "get_search" || $action === "search") {
 
-    $term = strtolower($_REQUEST['search_text'] ?? ($payload['search_text'] ?? ""));
+// ACTION: LIVE TV LIST
+if ($action == "live_tv") {
 
-    $matches = array_values(array_filter($liveTV, function($ch) use ($term) {
-        return $term === "" || strpos(strtolower($ch['name']), $term) !== false;
-    }));
-
-    success("search", $matches);
-}
-
-// 9) LOGIN
-if ($action === "user_login") {
-
-    if (!$payload || !isset($payload["email"], $payload["password"])) {
-        error("missing_credentials");
+    if (!isset($_GET['category_id'])) {
+        sendResponse(0, "category_id required");
     }
 
-    $email = strtolower(trim($payload["email"]));
-    $pass = $payload["password"];
+    $cat_id = (int) $_GET['category_id'];
 
-    foreach ($users as $u) {
-        if ($u['email'] === $email && $u['password'] === $pass) {
-            success("login", [$u]);
+    $filtered = [];
+
+    foreach ($live_tv as $ch) {
+        if ($ch['category_id'] == $cat_id && $ch['status'] == 1) {
+            $filtered[] = $ch;
         }
     }
 
-    error("invalid_login");
+    sendResponse(1, "success", $filtered);
 }
 
-// 10) REGISTER
-if ($action === "user_register") {
 
-    if (!$payload || !isset($payload["email"], $payload["password"], $payload["name"])) {
-        error("missing_registration_fields");
+
+// ACTION: SINGLE TV DETAILS
+if ($action == "single_tv") {
+
+    if (!isset($_GET['id'])) {
+        sendResponse(0, "id required");
     }
 
-    $email = strtolower(trim($payload["email"]));
+    $id = (int) $_GET['id'];
 
-    foreach ($users as $u) {
-        if ($u["email"] === $email) error("email_exists");
+    foreach ($live_tv as $ch) {
+        if ($ch['id'] == $id) {
+            sendResponse(1, "success", [$ch]);
+        }
     }
 
-    $newId = empty($users) ? 1 : max(array_column($users, 'id')) + 1;
-
-    $newUser = [
-        "id" => $newId,
-        "name" => $payload["name"],
-        "email" => $email,
-        "password" => $payload["password"],
-        "status" => 1
-    ];
-
-    $users[] = $newUser;
-    write_json_file('users.json', $users);
-
-    success("register", [$newUser]);
+    sendResponse(0, "not found");
 }
 
-// 11) SUGGESTION
-if ($action === "post_suggest") {
 
-    if (!$payload || !isset($payload["user_id"], $payload["message"])) {
-        error("missing_suggestion_fields");
+
+// ACTION: SEARCH
+if ($action == "search") {
+
+    if (!isset($_GET['keyword'])) {
+        sendResponse(0, "keyword required");
     }
 
-    $newId = empty($suggestions) ? 1 : max(array_column($suggestions, 'id')) + 1;
+    $keyword = strtolower($_GET['keyword']);
+    $result = [];
 
-    $new = [
-        "id" => $newId,
-        "user_id" => $payload["user_id"],
-        "message" => $payload["message"],
-        "created" => date("Y-m-d H:i:s")
-    ];
-
-    $suggestions[] = $new;
-    write_json_file('suggestions.json', $suggestions);
-
-    success("suggestion_sent", [$new]);
-}
-
-// 12) REPORT
-if ($action === "post_report") {
-
-    if (!$payload || !isset($payload["channel_id"], $payload["user_id"], $payload["message"])) {
-        error("missing_report_fields");
+    foreach ($live_tv as $ch) {
+        if (strpos(strtolower($ch['name']), $keyword) !== false) {
+            $result[] = $ch;
+        }
     }
 
-    $newId = empty($reports) ? 1 : max(array_column($reports, 'id')) + 1;
-
-    $new = [
-        "id" => $newId,
-        "channel_id" => $payload["channel_id"],
-        "user_id" => $payload["user_id"],
-        "message" => $payload["message"],
-        "created" => date("Y-m-d H:i:s")
-    ];
-
-    $reports[] = $new;
-    write_json_file('reports.json', $reports);
-
-    success("report_sent", [$new]);
+    sendResponse(1, "success", $result);
 }
 
-// 13) SUBSCRIPTIONS
-if ($action === "subscription_list") {
-    success("subscription_list", $subs);
-}
 
-// DEFAULT
-error("unknown_action");
+
+// DEFAULT (Unknown action)
+sendResponse(0, "unknown_action", []);
+
+?>
