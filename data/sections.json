@@ -1,0 +1,12 @@
+[
+  {
+    "type": "featured",
+    "title": "Featured Channels",
+    "channel_ids": [1, 5, 8]
+  },
+  {
+    "type": "latest",
+    "title": "Latest Channels",
+    "channel_ids": [2, 3]
+  }
+]

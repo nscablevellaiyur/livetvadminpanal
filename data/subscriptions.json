@@ -1,0 +1,18 @@
+[
+  {
+    "id": 1,
+    "plan_name": "Monthly Premium",
+    "plan_price": "99",
+    "plan_duration": "30",
+    "plan_details": "Access all premium channels",
+    "status": 1
+  },
+  {
+    "id": 2,
+    "plan_name": "Yearly Premium",
+    "plan_price": "899",
+    "plan_duration": "365",
+    "plan_details": "1 Year Unlimited Access",
+    "status": 1
+  }
+]

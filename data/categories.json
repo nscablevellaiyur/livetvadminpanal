@@ -1,0 +1,20 @@
+[
+  {
+    "id": 1,
+    "category_name": "Sports",
+    "category_image": "uploads/category/sports.png",
+    "status": 1
+  },
+  {
+    "id": 2,
+    "category_name": "Entertainment",
+    "category_image": "uploads/category/entertainment.png",
+    "status": 1
+  },
+  {
+    "id": 3,
+    "category_name": "News",
+    "category_image": "uploads/category/news.png",
+    "status": 1
+  }
+]
