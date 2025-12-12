@@ -1,234 +1,115 @@
 <?php
 header('Content-Type: application/json');
-$ROOT = "NEMOSOFTS_APP";
-
-function send($data) {
-    global $ROOT;
-    echo json_encode([$ROOT => $data], JSON_UNESCAPED_SLASHES);
+function sendResponse($data){
+    echo json_encode(["NEMOSOFTS_APP" => [$data]], JSON_UNESCAPED_SLASHES);
     exit;
 }
 
-# Load JSON files
-function load_json($file) {
-    $path = "data/" . $file;
-    if (!file_exists($path)) return [];
-    $json = json_decode(file_get_contents($path), true);
-    return $json ?: [];
+function safeGet($arr, $key){
+    return isset($arr[$key]) ? $arr[$key] : "";
 }
 
-$tbl_live      = load_json("tbl_live.json");
-$tbl_category  = load_json("tbl_category.json");
-$tbl_home      = load_json("tbl_home_sections.json");
-$tbl_settings  = load_json("tbl_settings.json");
-$tbl_banner    = load_json("tbl_banner.json");
+// Decode incoming POST Base64 JSON
+$raw = $_POST['data'] ?? "";
+if(empty($raw)){
+    sendResponse(["success"=>"0","MSG"=>"invalid_request"]);
+}
 
-$data = $_GET['data'] ?? "";
+$json = base64_decode($raw);
+$req = json_decode($json, true);
 
-###############################################################
-# 1. app_details (FIRST API CALL FROM THE APP)
-###############################################################
-if ($data == "app_details") {
+if(!$req){
+    sendResponse(["success"=>"0","MSG"=>"invalid_json"]);
+}
 
-    if (empty($tbl_settings)) {
-        send([
-            [
-                "success" => "0",
-                "MSG" => "settings_not_found"
-            ]
-        ]);
+$helper = safeGet($req, "helper_name");
+
+// Load JSON files
+function load_json($file){
+    $path = __DIR__."/data/".$file;
+    return file_exists($path) ? json_decode(file_get_contents($path), true) : [];
+}
+
+$tbl_live = load_json("tbl_live.json")["tbl_live"] ?? [];
+$tbl_cat  = load_json("tbl_category.json")["tbl_category"] ?? [];
+$tbl_home = load_json("tbl_home_sections.json")["tbl_home_sections"] ?? [];
+$tbl_banner = load_json("tbl_banner.json")["tbl_banner"] ?? [];
+
+// ---------------- HELPERS ---------------- //
+function filterActive($arr){
+    return array_values(array_filter($arr, fn($a) => ($a["status"] ?? "")=="1"));
+}
+
+// ---------------- API HANDLERS ---------------- //
+
+if($helper == "app_details"){
+    $settings = load_json("tbl_settings.json");
+    if(empty($settings)){
+        sendResponse(["success"=>"0","MSG"=>"settings_not_found"]);
     }
-
-    send([
-        [
-            "success" => "1",
-            "MSG" => "success",
-            "app_name" => "Online Live TV",
-            "app_logo" => $tbl_settings["app_logo"] ?? "",
-            "app_email" => $tbl_settings["app_email"] ?? "",
-            "app_author" => $tbl_settings["app_author"] ?? "",
-            "app_contact" => $tbl_settings["app_contact"] ?? "",
-            "app_website" => $tbl_settings["app_website"] ?? "",
-            "app_description" => $tbl_settings["app_description"] ?? "",
-            "app_developed_by" => $tbl_settings["app_developed_by"] ?? "",
-            "ad_status" => "false"
-        ]
+    sendResponse([
+        "success"=>"1","MSG"=>"success",
+        "app_name"=>$settings["app_name"] ?? "",
+        "app_logo"=>$settings["app_logo"] ?? "",
+        "app_email"=>$settings["app_email"] ?? "",
+        "app_contact"=>$settings["app_contact"] ?? "",
+        "app_website"=>$settings["app_website"] ?? "",
+        "app_description"=>$settings["app_description"] ?? "",
+        "app_developed_by"=>$settings["app_developed_by"] ?? ""
     ]);
 }
 
-###############################################################
-# 2. get_home (Home page sections)
-###############################################################
-if ($data == "get_home") {
-
-    $final = [];
-
-    if (!empty($tbl_home["tbl_home_sections"])) {
-
-        foreach ($tbl_home["tbl_home_sections"] as $sec) {
-
-            $section_items = [];
-
-            if (!empty($sec["channel_ids"])) {
-                foreach ($sec["channel_ids"] as $id) {
-
-                    foreach ($tbl_live["tbl_live"] as $ch) {
-
-                        if ($ch["id"] == $id && $ch["status"] == "1") {
-                            $section_items[] = $ch;
-                        }
-                    }
+if($helper == "home"){
+    $home = [];
+    foreach($tbl_home as $sec){
+        $items = [];
+        foreach($sec["channel_ids"] ?? [] as $id){
+            foreach($tbl_live as $ch){
+                if($ch["id"] == $id && $ch["status"]=="1"){
+                    $items[] = $ch;
                 }
             }
-
-            $final[] = [
-                "type" => $sec["type"],
-                "title" => $sec["title"],
-                "list" => $section_items
-            ];
         }
-    }
-
-    // Add banner section if exists
-    if (!empty($tbl_banner["tbl_banner"])) {
-        $final[] = [
-            "type"  => "banner",
-            "title" => "Banners",
-            "list"  => $tbl_banner["tbl_banner"]
+        $home[] = [
+            "section"=>$sec["title"],
+            "list"=>$items
         ];
     }
-
-    send([
-        [
-            "success" => "1",
-            "MSG" => "success",
-            "home" => $final
-        ]
+    sendResponse([
+        "success"=>"1","MSG"=>"success",
+        "home"=>$home,
+        "banner"=>$tbl_banner,
+        "category"=>$tbl_cat
     ]);
 }
 
-###############################################################
-# 3. cat_list (Category list)
-###############################################################
-if ($data == "cat_list") {
-    send([
-        [
-            "success" => "1",
-            "MSG" => "success",
-            "category" => $tbl_category
-        ]
-    ]);
+if($helper == "latest"){
+    $sorted = array_reverse(filterActive($tbl_live));
+    sendResponse(["success"=>"1","MSG"=>"success","latest"=>$sorted]);
 }
 
-###############################################################
-# 4. get_live_id (Single channel details)
-###############################################################
-if ($data == "get_live_id") {
+if($helper == "most_viewed"){
+    $sorted = filterActive($tbl_live);
+    usort($sorted, fn($a,$b) => ($b["total_views"] ?? 0) <=> ($a["total_views"] ?? 0));
+    sendResponse(["success"=>"1","MSG"=>"success","most_viewed"=>$sorted]);
+}
 
-    $id = $_GET["id"] ?? "";
-    if ($id == "") send([["success" => "0", "MSG" => "missing_id"]]);
-
-    foreach ($tbl_live["tbl_live"] as $ch) {
-        if ($ch["id"] == $id) {
-            send([
-                [
-                    "success" => "1",
-                    "MSG" => "success",
-                    "live_data" => [$ch],
-                    "related" => []
-                ]
-            ]);
+if($helper == "live_id"){
+    $id = safeGet($req, "post_id");
+    foreach($tbl_live as $ch){
+        if($ch["id"] == $id){
+            sendResponse(["success"=>"1","MSG"=>"success","live_data"=>$ch]);
         }
     }
-
-    send([["success" => "0", "MSG" => "not_found"]]);
+    sendResponse(["success"=>"0","MSG"=>"not_found"]);
 }
 
-###############################################################
-# 5. get_cat_by (Channels by category)
-###############################################################
-if ($data == "get_cat_by") {
-
-    $cid = $_GET["cid"] ?? "";
-    if ($cid == "") send([["success" => "0", "MSG" => "missing_cid"]]);
-
-    $result = [];
-
-    foreach ($tbl_live["tbl_live"] as $ch) {
-        if ($ch["cat_id"] == $cid && $ch["status"] == "1") {
-            $result[] = $ch;
-        }
-    }
-
-    send([
-        [
-            "success" => "1",
-            "MSG" => "success",
-            "data" => $result
-        ]
-    ]);
+if($helper == "search_live"){
+    $search = strtolower(safeGet($req,"search_text"));
+    $results = array_values(array_filter($tbl_live, fn($ch) => strpos(strtolower($ch["live_title"]), $search) !== false));
+    sendResponse(["success"=>"1","MSG"=>"success","search"=>$results]);
 }
 
-###############################################################
-# 6. get_latest (last added channels)
-###############################################################
-if ($data == "get_latest") {
-    send([
-        [
-            "success" => "1",
-            "MSG" => "success",
-            "latest" => array_reverse($tbl_live["tbl_live"])
-        ]
-    ]);
-}
-
-###############################################################
-# 7. get_trending (most viewed)
-###############################################################
-if ($data == "get_trending") {
-
-    $sorted = $tbl_live["tbl_live"];
-    usort($sorted, fn($a, $b) => ($b["total_views"] ?? 0) <=> ($a["total_views"] ?? 0));
-
-    send([
-        [
-            "success" => "1",
-            "MSG" => "success",
-            "trending" => $sorted
-        ]
-    ]);
-}
-
-###############################################################
-# 8. get_search_live
-###############################################################
-if ($data == "get_search_live") {
-
-    $keyword = strtolower($_GET["keyword"] ?? "");
-    $result = [];
-
-    foreach ($tbl_live["tbl_live"] as $ch) {
-        if (strpos(strtolower($ch["live_title"]), $keyword) !== false) {
-            $result[] = $ch;
-        }
-    }
-
-    send([
-        [
-            "success" => "1",
-            "MSG" => "success",
-            "data" => $result
-        ]
-    ]);
-}
-
-###############################################################
-# DEFAULT ERROR
-###############################################################
-send([
-    [
-        "success" => "0",
-        "MSG" => "invalid_method"
-    ]
-]);
+sendResponse(["success"=>"0","MSG"=>"unknown_helper"]);
 
 ?>
