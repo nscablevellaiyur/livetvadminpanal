@@ -1,115 +1,174 @@
 <?php
-header('Content-Type: application/json');
-function sendResponse($data){
-    echo json_encode(["NEMOSOFTS_APP" => [$data]], JSON_UNESCAPED_SLASHES);
+header("Content-Type: application/json; charset=utf-8");
+header("Access-Control-Allow-Origin: *");
+
+function sendResponse($arr) {
+    echo json_encode(["NEMOSOFTS_APP" => [$arr]]);
     exit;
 }
 
-function safeGet($arr, $key){
-    return isset($arr[$key]) ? $arr[$key] : "";
+# Load JSON Files
+$tbl_cat          = json_decode(file_get_contents("data/tbl_category.json"), true);
+$tbl_live         = json_decode(file_get_contents("data/tbl_live.json"), true);
+$tbl_home_sections = json_decode(file_get_contents("data/tbl_home_sections.json"), true);
+$tbl_settings     = json_decode(file_get_contents("data/tbl_settings.json"), true);
+$tbl_users        = json_decode(file_get_contents("data/tbl_users.json"), true);
+
+# Decode incoming request
+if (!isset($_POST["data"])) {
+    sendResponse(["success" => "0", "MSG" => "no_data"]);
 }
 
-// Decode incoming POST Base64 JSON
-$raw = $_POST['data'] ?? "";
-if(empty($raw)){
-    sendResponse(["success"=>"0","MSG"=>"invalid_request"]);
-}
+$req = json_decode(base64_decode($_POST["data"]), true);
+$helper = $req["helper_name"] ?? "";
 
-$json = base64_decode($raw);
-$req = json_decode($json, true);
-
-if(!$req){
-    sendResponse(["success"=>"0","MSG"=>"invalid_json"]);
-}
-
-$helper = safeGet($req, "helper_name");
-
-// Load JSON files
-function load_json($file){
-    $path = __DIR__."/data/".$file;
-    return file_exists($path) ? json_decode(file_get_contents($path), true) : [];
-}
-
-$tbl_live = load_json("tbl_live.json")["tbl_live"] ?? [];
-$tbl_cat  = load_json("tbl_category.json")["tbl_category"] ?? [];
-$tbl_home = load_json("tbl_home_sections.json")["tbl_home_sections"] ?? [];
-$tbl_banner = load_json("tbl_banner.json")["tbl_banner"] ?? [];
-
-// ---------------- HELPERS ---------------- //
-function filterActive($arr){
-    return array_values(array_filter($arr, fn($a) => ($a["status"] ?? "")=="1"));
-}
-
-// ---------------- API HANDLERS ---------------- //
-
-if($helper == "app_details"){
-    $settings = load_json("tbl_settings.json");
-    if(empty($settings)){
-        sendResponse(["success"=>"0","MSG"=>"settings_not_found"]);
-    }
+# -------------------------------------------------------------------
+# APP DETAILS / SETTINGS
+# -------------------------------------------------------------------
+if ($helper == "get_app_details") {
     sendResponse([
-        "success"=>"1","MSG"=>"success",
-        "app_name"=>$settings["app_name"] ?? "",
-        "app_logo"=>$settings["app_logo"] ?? "",
-        "app_email"=>$settings["app_email"] ?? "",
-        "app_contact"=>$settings["app_contact"] ?? "",
-        "app_website"=>$settings["app_website"] ?? "",
-        "app_description"=>$settings["app_description"] ?? "",
-        "app_developed_by"=>$settings["app_developed_by"] ?? ""
+        "success" => "1",
+        "MSG" => "success",
+        "app_details" => $tbl_settings,
+        "home_sections" => $tbl_home_sections
     ]);
 }
 
-if($helper == "home"){
-    $home = [];
-    foreach($tbl_home as $sec){
-        $items = [];
-        foreach($sec["channel_ids"] ?? [] as $id){
-            foreach($tbl_live as $ch){
-                if($ch["id"] == $id && $ch["status"]=="1"){
-                    $items[] = $ch;
-                }
-            }
-        }
-        $home[] = [
-            "section"=>$sec["title"],
-            "list"=>$items
-        ];
-    }
+# -------------------------------------------------------------------
+# HOME PAGE API
+# -------------------------------------------------------------------
+if ($helper == "get_home") {
+
     sendResponse([
-        "success"=>"1","MSG"=>"success",
-        "home"=>$home,
-        "banner"=>$tbl_banner,
-        "category"=>$tbl_cat
+        "success" => "1",
+        "MSG" => "success",
+        "home_sections" => $tbl_home_sections,
+        "category" => $tbl_cat,
+        "live" => $tbl_live
     ]);
 }
 
-if($helper == "latest"){
-    $sorted = array_reverse(filterActive($tbl_live));
-    sendResponse(["success"=>"1","MSG"=>"success","latest"=>$sorted]);
+# -------------------------------------------------------------------
+# CATEGORY LIST
+# -------------------------------------------------------------------
+if ($helper == "cat_list") {
+
+    sendResponse([
+        "success" => "1",
+        "MSG" => "success",
+        "category" => $tbl_cat
+    ]);
 }
 
-if($helper == "most_viewed"){
-    $sorted = filterActive($tbl_live);
-    usort($sorted, fn($a,$b) => ($b["total_views"] ?? 0) <=> ($a["total_views"] ?? 0));
-    sendResponse(["success"=>"1","MSG"=>"success","most_viewed"=>$sorted]);
-}
+# -------------------------------------------------------------------
+# CATEGORY BY ID
+# -------------------------------------------------------------------
+if ($helper == "get_cat_by") {
 
-if($helper == "live_id"){
-    $id = safeGet($req, "post_id");
-    foreach($tbl_live as $ch){
-        if($ch["id"] == $id){
-            sendResponse(["success"=>"1","MSG"=>"success","live_data"=>$ch]);
+    $cid = $req["cat_id"] ?? "";
+
+    $result = [];
+    foreach ($tbl_live as $row) {
+        if ($row["cat_id"] == $cid && $row["status"] == "1") {
+            $result[] = $row;
         }
     }
-    sendResponse(["success"=>"0","MSG"=>"not_found"]);
+
+    sendResponse([
+        "success" => "1",
+        "MSG" => "success",
+        "data" => $result
+    ]);
 }
 
-if($helper == "search_live"){
-    $search = strtolower(safeGet($req,"search_text"));
-    $results = array_values(array_filter($tbl_live, fn($ch) => strpos(strtolower($ch["live_title"]), $search) !== false));
-    sendResponse(["success"=>"1","MSG"=>"success","search"=>$results]);
+# -------------------------------------------------------------------
+# LIVE TV DETAILS
+# -------------------------------------------------------------------
+if ($helper == "get_live_id") {
+
+    $id = $req["post_id"] ?? "";
+
+    foreach ($tbl_live as $row) {
+        if ($row["id"] == $id) {
+            sendResponse([
+                "success" => "1",
+                "MSG" => "success",
+                "live" => $row
+            ]);
+        }
+    }
+
+    sendResponse(["success" => "0", "MSG" => "not_found"]);
 }
 
-sendResponse(["success"=>"0","MSG"=>"unknown_helper"]);
+# -------------------------------------------------------------------
+# SEARCH
+# -------------------------------------------------------------------
+if ($helper == "search") {
 
+    $text = strtolower($req["search_text"] ?? "");
+    $result = [];
+
+    foreach ($tbl_live as $row) {
+        if (strpos(strtolower($row["title"]), $text) !== false) {
+            $result[] = $row;
+        }
+    }
+
+    sendResponse([
+        "success" => "1",
+        "MSG" => "success",
+        "data" => $result
+    ]);
+}
+
+# -------------------------------------------------------------------
+# LATEST
+# -------------------------------------------------------------------
+if ($helper == "latest") {
+    sendResponse([
+        "success" => "1",
+        "MSG" => "success",
+        "data" => array_reverse($tbl_live)
+    ]);
+}
+
+# -------------------------------------------------------------------
+# MOST VIEWED
+# -------------------------------------------------------------------
+if ($helper == "most_viewed") {
+    usort($tbl_live, fn($a, $b) => $b["views"] <=> $a["views"]);
+
+    sendResponse([
+        "success" => "1",
+        "MSG" => "success",
+        "data" => $tbl_live
+    ]);
+}
+
+# -------------------------------------------------------------------
+# LOGIN (Dummy JSON login)
+# -------------------------------------------------------------------
+if ($helper == "login") {
+
+    $email = $req["user_email"] ?? "";
+    $pass  = $req["user_password"] ?? "";
+
+    foreach ($tbl_users as $u) {
+        if ($u["email"] == $email && $u["password"] == $pass) {
+            sendResponse([
+                "success" => "1",
+                "MSG" => "success",
+                "user" => $u
+            ]);
+        }
+    }
+
+    sendResponse(["success" => "0", "MSG" => "invalid_login"]);
+}
+
+# -------------------------------------------------------------------
+# DEFAULT: UNKNOWN HELPER
+# -------------------------------------------------------------------
+sendResponse(["success" => "0", "MSG" => "unknown_helper"]);
 ?>
