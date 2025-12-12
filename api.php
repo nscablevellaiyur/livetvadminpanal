@@ -2,14 +2,12 @@
 header("Content-Type: application/json");
 date_default_timezone_set("Asia/Kolkata");
 
-// Root key must match BuildConfig.API_NAME
 $ROOT = "NEMOSOFTS_APP";
 
-// Load JSON database
-$live_tv  = json_decode(file_get_contents("data/live_tv.json"), true)['tbl_live'];
-$category = json_decode(file_get_contents("data/category.json"), true)['tbl_category'];
+// Load correct JSON files
+$live_tv  = json_decode(file_get_contents("data/tbl_live.json"), true)['tbl_live'];
+$category = json_decode(file_get_contents("data/tbl_category.json"), true)['tbl_category'];
 
-// Response function
 function send($success, $msg, $extra = [])
 {
     global $ROOT;
@@ -22,59 +20,47 @@ function send($success, $msg, $extra = [])
     exit;
 }
 
-// Read POST data (Nemosofts uses Base64 encoded "data")
 if (!isset($_POST['data'])) {
     send("0", "invalid_method");
 }
 
 $data = json_decode(base64_decode($_POST['data']), true);
-if (!$data) {
-    send("0", "invalid_json");
-}
+if (!$data) send("0", "invalid_json");
 
 $method = $data['helper_name'] ?? "";
 
-// ----------------------------------------------------
-// APP DETAILS (Launcher needs this)
-// ----------------------------------------------------
+// APP DETAILS
 if ($method == "app_details") {
-
     send("1", "success", [
         "app_name" => "Online Live TV",
         "app_version" => "1",
-        "user_id" => "",
         "isLogin" => false,
         "isMaintenance" => false
     ]);
 }
 
-// ----------------------------------------------------
-// HOME → return ALL LIVE TV channels
-// ----------------------------------------------------
+// HOME → return ALL channels
 if ($method == "get_home") {
 
-    $channels = [];
-
+    $list = [];
     foreach ($live_tv as $ch) {
-        if ($ch['status'] == "1") {
-            $channels[] = $ch;
+        if ($ch["status"] == "1") {
+            $list[] = $ch;
         }
     }
 
     send("1", "success", [
-        "live_data" => $channels,
-        "related"   => []
+        "live_data" => $list,
+        "related" => []
     ]);
 }
 
-// ----------------------------------------------------
 // CATEGORY LIST
-// ----------------------------------------------------
 if ($method == "cat_list") {
 
     $cats = [];
     foreach ($category as $cat) {
-        if ($cat['status'] == "1") {
+        if ($cat["status"] == "1") {
             $cats[] = $cat;
         }
     }
@@ -84,9 +70,7 @@ if ($method == "cat_list") {
     ]);
 }
 
-// ----------------------------------------------------
-// LIVE BY CATEGORY
-// ----------------------------------------------------
+// BY CATEGORY
 if ($method == "get_cat_by") {
 
     $cid = $data['cat_id'] ?? "";
@@ -99,14 +83,10 @@ if ($method == "get_cat_by") {
         }
     }
 
-    send("1", "success", [
-        "live_data" => $list
-    ]);
+    send("1", "success", ["live_data" => $list]);
 }
 
-// ----------------------------------------------------
-// SINGLE LIVE CHANNEL DETAILS
-// ----------------------------------------------------
+// SINGLE LIVE
 if ($method == "get_live_id") {
 
     $id = $data['post_id'] ?? "";
@@ -124,28 +104,20 @@ if ($method == "get_live_id") {
     send("0", "not_found");
 }
 
-// ----------------------------------------------------
-// SEARCH LIVE CHANNELS
-// ----------------------------------------------------
+// SEARCH
 if ($method == "get_search_live") {
 
-    $keyword = strtolower($data['search_text'] ?? "");
+    $key = strtolower($data['search_text'] ?? "");
 
     $result = [];
     foreach ($live_tv as $ch) {
-        if (strpos(strtolower($ch['live_title']), $keyword) !== false) {
+        if (strpos(strtolower($ch['live_title']), $key) !== false) {
             $result[] = $ch;
         }
     }
 
-    send("1", "success", [
-        "live_data" => $result
-    ]);
+    send("1", "success", ["live_data" => $result]);
 }
 
-// ----------------------------------------------------
-// UNKNOWN METHOD
-// ----------------------------------------------------
 send("0", "invalid_method");
-
 ?>
