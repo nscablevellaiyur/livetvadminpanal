@@ -1,135 +1,151 @@
 <?php
 header("Content-Type: application/json");
+date_default_timezone_set("Asia/Kolkata");
 
+// Root key must match BuildConfig.API_NAME
 $ROOT = "NEMOSOFTS_APP";
 
-// Read POST base64 data
-if (!isset($_POST['data'])) {
-    echo json_encode([$ROOT => [["success" => "0", "MSG" => "invalid_request"]]]);
-    exit;
-}
+// Load JSON database
+$live_tv  = json_decode(file_get_contents("data/live_tv.json"), true)['tbl_live'];
+$category = json_decode(file_get_contents("data/category.json"), true)['tbl_category'];
 
-$raw = base64_decode($_POST['data']);
-$request = json_decode($raw, true);
-
-// Main parameter from app
-$method = $request['helper_name'] ?? "";
-
-$categories = json_decode(file_get_contents("data/categories.json"), true);
-$live_tv    = json_decode(file_get_contents("data/live_tv.json"), true);
-$sections   = json_decode(file_get_contents("data/sections.json"), true);
-
-// Response
-function sendResponse($success, $msg, $data = [])
+// Response function
+function send($success, $msg, $extra = [])
 {
     global $ROOT;
     echo json_encode([
-        $ROOT => [
-            [
-                "success" => $success,
-                "MSG" => $msg,
-                "data" => $data
-            ]
-        ]
+        $ROOT => array_merge([
+            "success" => $success,
+            "MSG"     => $msg
+        ], $extra)
     ], JSON_UNESCAPED_SLASHES);
     exit;
 }
 
-//////////////////////////////////////////////////////
-// METHOD: get_home
-//////////////////////////////////////////////////////
+// Read POST data (Nemosofts uses Base64 encoded "data")
+if (!isset($_POST['data'])) {
+    send("0", "invalid_method");
+}
+
+$data = json_decode(base64_decode($_POST['data']), true);
+if (!$data) {
+    send("0", "invalid_json");
+}
+
+$method = $data['helper_name'] ?? "";
+
+// ----------------------------------------------------
+// APP DETAILS (Launcher needs this)
+// ----------------------------------------------------
+if ($method == "app_details") {
+
+    send("1", "success", [
+        "app_name" => "Online Live TV",
+        "app_version" => "1",
+        "user_id" => "",
+        "isLogin" => false,
+        "isMaintenance" => false
+    ]);
+}
+
+// ----------------------------------------------------
+// HOME → return ALL LIVE TV channels
+// ----------------------------------------------------
 if ($method == "get_home") {
 
-    $result = [];
-    foreach ($sections as $sec) {
+    $channels = [];
 
-        $list = [];
-
-        foreach ($sec['channel_ids'] as $id) {
-            foreach ($live_tv as $ch) {
-                if ($ch['id'] == $id && $ch['status'] == 1) {
-                    $list[] = $ch;
-                }
-            }
+    foreach ($live_tv as $ch) {
+        if ($ch['status'] == "1") {
+            $channels[] = $ch;
         }
-
-        $result[] = [
-            "type" => $sec['type'],
-            "title" => $sec['title'],
-            "list" => $list
-        ];
     }
 
-    sendResponse("1", "success", $result);
+    send("1", "success", [
+        "live_data" => $channels,
+        "related"   => []
+    ]);
 }
 
-
-//////////////////////////////////////////////////////
-// METHOD: cat_list
-//////////////////////////////////////////////////////
+// ----------------------------------------------------
+// CATEGORY LIST
+// ----------------------------------------------------
 if ($method == "cat_list") {
 
-    $active = array_values(array_filter($categories, fn ($c) => $c['status'] == 1));
+    $cats = [];
+    foreach ($category as $cat) {
+        if ($cat['status'] == "1") {
+            $cats[] = $cat;
+        }
+    }
 
-    sendResponse("1", "success", $active);
+    send("1", "success", [
+        "category" => $cats
+    ]);
 }
 
-
-//////////////////////////////////////////////////////
-// METHOD: get_cat_by
-//////////////////////////////////////////////////////
+// ----------------------------------------------------
+// LIVE BY CATEGORY
+// ----------------------------------------------------
 if ($method == "get_cat_by") {
 
-    $cid = $request['cat_id'] ?? 0;
-    $cid = intval($cid);
+    $cid = $data['cat_id'] ?? "";
+    if ($cid == "") send("0", "category_required");
 
     $list = [];
     foreach ($live_tv as $ch) {
-        if ($ch['category_id'] == $cid && $ch['status'] == 1) {
+        if ($ch['cat_id'] == $cid && $ch['status'] == "1") {
             $list[] = $ch;
         }
     }
 
-    sendResponse("1", "success", $list);
+    send("1", "success", [
+        "live_data" => $list
+    ]);
 }
 
-
-//////////////////////////////////////////////////////
-// METHOD: get_live_id
-//////////////////////////////////////////////////////
+// ----------------------------------------------------
+// SINGLE LIVE CHANNEL DETAILS
+// ----------------------------------------------------
 if ($method == "get_live_id") {
 
-    $id = intval($request['post_id'] ?? 0);
+    $id = $data['post_id'] ?? "";
+    if ($id == "") send("0", "id_required");
 
     foreach ($live_tv as $ch) {
         if ($ch['id'] == $id) {
-            sendResponse("1", "success", [$ch]);
+            send("1", "success", [
+                "live_data" => [$ch],
+                "related" => []
+            ]);
         }
     }
 
-    sendResponse("0", "not_found");
+    send("0", "not_found");
 }
 
-
-//////////////////////////////////////////////////////
-// METHOD: get_search_live
-//////////////////////////////////////////////////////
+// ----------------------------------------------------
+// SEARCH LIVE CHANNELS
+// ----------------------------------------------------
 if ($method == "get_search_live") {
 
-    $key = strtolower($request['search_text'] ?? "");
-    $result = [];
+    $keyword = strtolower($data['search_text'] ?? "");
 
+    $result = [];
     foreach ($live_tv as $ch) {
-        if (strpos(strtolower($ch['name']), $key) !== false) {
+        if (strpos(strtolower($ch['live_title']), $keyword) !== false) {
             $result[] = $ch;
         }
     }
 
-    sendResponse("1", "success", $result);
+    send("1", "success", [
+        "live_data" => $result
+    ]);
 }
 
-//////////////////////////////////////////////////////
-// DEFAULT
-//////////////////////////////////////////////////////
-sendResponse("0", "invalid_method");
+// ----------------------------------------------------
+// UNKNOWN METHOD
+// ----------------------------------------------------
+send("0", "invalid_method");
+
 ?>
