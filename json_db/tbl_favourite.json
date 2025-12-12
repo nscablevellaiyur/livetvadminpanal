@@ -1,0 +1,11 @@
+{
+    "tbl_favourite": [
+        {
+            "id": 0,
+            "post_id": "3",
+            "user_id": "1",
+            "type": "live",
+            "created_at": "1765485941"
+        }
+    ]
+}
