@@ -1,3 +1,19 @@
 {
-    "tbl_home_sections": []
+  "tbl_home_sections": [
+    {
+      "type": "slider",
+      "title": "Top Channels",
+      "channel_ids": ["1", "2", "3"]
+    },
+    {
+      "type": "latest",
+      "title": "Latest Added",
+      "channel_ids": ["4", "5", "6"]
+    },
+    {
+      "type": "kids",
+      "title": "Kids Channels",
+      "channel_ids": ["1", "4", "10"]
+    }
+  ]
 }
