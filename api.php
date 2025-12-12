@@ -61,29 +61,34 @@ if ($data == "get_home") {
 
     $final = [];
 
-    foreach ($tbl_home["tbl_home_sections"] as $sec) {
-        $section_items = [];
-        foreach ($sec["channel_ids"] as $id) {
-            foreach ($tbl_live as $ch) {
-                if ($ch["id"] == $id && $ch["status"] == "1") {
-                    $section_items[] = $ch;
+    if (!empty($tbl_home["tbl_home_sections"])) {
+
+        foreach ($tbl_home["tbl_home_sections"] as $sec) {
+
+            $section_items = [];
+
+            foreach ($sec["channel_ids"] as $id) {
+                foreach ($tbl_live["tbl_live"] as $ch) {
+                    if ($ch["id"] == $id && $ch["status"] == "1") {
+                        $section_items[] = $ch;
+                    }
                 }
             }
-        }
 
-        $final[] = [
-            "type" => $sec["type"],
-            "title" => $sec["title"],
-            "list" => $section_items
-        ];
+            $final[] = [
+                "type" => $sec["type"],
+                "title" => $sec["title"],
+                "list" => $section_items
+            ];
+        }
     }
 
-    # Add banners if exist
-    if (!empty($tbl_banner)) {
+    // Add banner section if exists
+    if (!empty($tbl_banner["tbl_banner"])) {
         $final[] = [
             "type" => "banner",
-            "title" => "Banners",
-            "list" => $tbl_banner
+            "title": "Banners",
+            "list" => $tbl_banner["tbl_banner"]
         ];
     }
 
