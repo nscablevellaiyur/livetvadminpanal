@@ -12,7 +12,8 @@ function send($data) {
 function load_json($file) {
     $path = "data/" . $file;
     if (!file_exists($path)) return [];
-    return json_decode(file_get_contents($path), true);
+    $json = json_decode(file_get_contents($path), true);
+    return $json ?: [];
 }
 
 $tbl_live      = load_json("tbl_live.json");
@@ -21,7 +22,7 @@ $tbl_home      = load_json("tbl_home_sections.json");
 $tbl_settings  = load_json("tbl_settings.json");
 $tbl_banner    = load_json("tbl_banner.json");
 
-$data = isset($_GET['data']) ? $_GET['data'] : "";
+$data = $_GET['data'] ?? "";
 
 ###############################################################
 # 1. app_details (FIRST API CALL FROM THE APP)
@@ -42,13 +43,13 @@ if ($data == "app_details") {
             "success" => "1",
             "MSG" => "success",
             "app_name" => "Online Live TV",
-            "app_logo" => $tbl_settings["app_logo"],
-            "app_email" => $tbl_settings["app_email"],
-            "app_author" => $tbl_settings["app_author"],
-            "app_contact" => $tbl_settings["app_contact"],
-            "app_website" => $tbl_settings["app_website"],
-            "app_description" => $tbl_settings["app_description"],
-            "app_developed_by" => $tbl_settings["app_developed_by"],
+            "app_logo" => $tbl_settings["app_logo"] ?? "",
+            "app_email" => $tbl_settings["app_email"] ?? "",
+            "app_author" => $tbl_settings["app_author"] ?? "",
+            "app_contact" => $tbl_settings["app_contact"] ?? "",
+            "app_website" => $tbl_settings["app_website"] ?? "",
+            "app_description" => $tbl_settings["app_description"] ?? "",
+            "app_developed_by" => $tbl_settings["app_developed_by"] ?? "",
             "ad_status" => "false"
         ]
     ]);
@@ -67,10 +68,14 @@ if ($data == "get_home") {
 
             $section_items = [];
 
-            foreach ($sec["channel_ids"] as $id) {
-                foreach ($tbl_live["tbl_live"] as $ch) {
-                    if ($ch["id"] == $id && $ch["status"] == "1") {
-                        $section_items[] = $ch;
+            if (!empty($sec["channel_ids"])) {
+                foreach ($sec["channel_ids"] as $id) {
+
+                    foreach ($tbl_live["tbl_live"] as $ch) {
+
+                        if ($ch["id"] == $id && $ch["status"] == "1") {
+                            $section_items[] = $ch;
+                        }
                     }
                 }
             }
@@ -86,9 +91,9 @@ if ($data == "get_home") {
     // Add banner section if exists
     if (!empty($tbl_banner["tbl_banner"])) {
         $final[] = [
-            "type" => "banner",
-            "title": "Banners",
-            "list" => $tbl_banner["tbl_banner"]
+            "type"  => "banner",
+            "title" => "Banners",
+            "list"  => $tbl_banner["tbl_banner"]
         ];
     }
 
@@ -122,7 +127,7 @@ if ($data == "get_live_id") {
     $id = $_GET["id"] ?? "";
     if ($id == "") send([["success" => "0", "MSG" => "missing_id"]]);
 
-    foreach ($tbl_live as $ch) {
+    foreach ($tbl_live["tbl_live"] as $ch) {
         if ($ch["id"] == $id) {
             send([
                 [
@@ -148,7 +153,7 @@ if ($data == "get_cat_by") {
 
     $result = [];
 
-    foreach ($tbl_live as $ch) {
+    foreach ($tbl_live["tbl_live"] as $ch) {
         if ($ch["cat_id"] == $cid && $ch["status"] == "1") {
             $result[] = $ch;
         }
@@ -171,7 +176,7 @@ if ($data == "get_latest") {
         [
             "success" => "1",
             "MSG" => "success",
-            "latest" => array_reverse($tbl_live)
+            "latest" => array_reverse($tbl_live["tbl_live"])
         ]
     ]);
 }
@@ -180,12 +185,15 @@ if ($data == "get_latest") {
 # 7. get_trending (most viewed)
 ###############################################################
 if ($data == "get_trending") {
-    usort($tbl_live, fn($a, $b) => $b["total_views"] <=> $a["total_views"]);
+
+    $sorted = $tbl_live["tbl_live"];
+    usort($sorted, fn($a, $b) => ($b["total_views"] ?? 0) <=> ($a["total_views"] ?? 0));
+
     send([
         [
             "success" => "1",
             "MSG" => "success",
-            "trending" => $tbl_live
+            "trending" => $sorted
         ]
     ]);
 }
@@ -198,7 +206,7 @@ if ($data == "get_search_live") {
     $keyword = strtolower($_GET["keyword"] ?? "");
     $result = [];
 
-    foreach ($tbl_live as $ch) {
+    foreach ($tbl_live["tbl_live"] as $ch) {
         if (strpos(strtolower($ch["live_title"]), $keyword) !== false) {
             $result[] = $ch;
         }
