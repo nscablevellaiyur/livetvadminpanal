@@ -1,19 +1,27 @@
 <?php
-header('Content-Type: application/json');
+header("Content-Type: application/json");
 
-// Main JSON root key (matches BuildConfig.API_NAME)
 $ROOT = "NEMOSOFTS_APP";
 
-// Load JSON files
+// Read POST base64 data
+if (!isset($_POST['data'])) {
+    echo json_encode([$ROOT => [["success" => "0", "MSG" => "invalid_request"]]]);
+    exit;
+}
+
+$raw = base64_decode($_POST['data']);
+$request = json_decode($raw, true);
+
+// Main parameter from app
+$method = $request['helper_name'] ?? "";
+
 $categories = json_decode(file_get_contents("data/categories.json"), true);
 $live_tv    = json_decode(file_get_contents("data/live_tv.json"), true);
 $sections   = json_decode(file_get_contents("data/sections.json"), true);
-$banners    = file_exists("data/banners.json") ? json_decode(file_get_contents("data/banners.json"), true) : [];
 
-$action = isset($_GET['action']) ? $_GET['action'] : "";
-
-// Response format
-function response($success, $msg, $data = []) {
+// Response
+function sendResponse($success, $msg, $data = [])
+{
     global $ROOT;
     echo json_encode([
         $ROOT => [
@@ -28,11 +36,11 @@ function response($success, $msg, $data = []) {
 }
 
 //////////////////////////////////////////////////////
-// ACTION: HOME (Sections)
+// METHOD: get_home
 //////////////////////////////////////////////////////
-if ($action == "home") {
-    $result = [];
+if ($method == "get_home") {
 
+    $result = [];
     foreach ($sections as $sec) {
 
         $list = [];
@@ -52,79 +60,63 @@ if ($action == "home") {
         ];
     }
 
-    // Attach banners if exist
-    if (!empty($banners)) {
-        $result[] = [
-            "type" => "banner",
-            "title" => "Banners",
-            "list" => $banners
-        ];
-    }
-
-    response(1, "success", $result);
+    sendResponse("1", "success", $result);
 }
 
+
 //////////////////////////////////////////////////////
-// ACTION: CATEGORY LIST
+// METHOD: cat_list
 //////////////////////////////////////////////////////
-if ($action == "category") {
-    $active = array_filter($categories, function($cat) {
-        return $cat['status'] == 1;
-    });
-    response(1, "success", array_values($active));
+if ($method == "cat_list") {
+
+    $active = array_values(array_filter($categories, fn ($c) => $c['status'] == 1));
+
+    sendResponse("1", "success", $active);
 }
 
-//////////////////////////////////////////////////////
-// ACTION: LIVE TV BY CATEGORY
-//////////////////////////////////////////////////////
-if ($action == "live_tv") {
 
-    if (!isset($_GET['category_id'])) {
-        response(0, "category_id required");
-    }
+//////////////////////////////////////////////////////
+// METHOD: get_cat_by
+//////////////////////////////////////////////////////
+if ($method == "get_cat_by") {
 
-    $cid = intval($_GET['category_id']);
+    $cid = $request['cat_id'] ?? 0;
+    $cid = intval($cid);
+
     $list = [];
-
     foreach ($live_tv as $ch) {
         if ($ch['category_id'] == $cid && $ch['status'] == 1) {
             $list[] = $ch;
         }
     }
 
-    response(1, "success", $list);
+    sendResponse("1", "success", $list);
 }
 
-//////////////////////////////////////////////////////
-// ACTION: SINGLE TV
-//////////////////////////////////////////////////////
-if ($action == "single_tv") {
 
-    if (!isset($_GET['id'])) {
-        response(0, "id required");
-    }
+//////////////////////////////////////////////////////
+// METHOD: get_live_id
+//////////////////////////////////////////////////////
+if ($method == "get_live_id") {
 
-    $id = intval($_GET['id']);
+    $id = intval($request['post_id'] ?? 0);
 
     foreach ($live_tv as $ch) {
         if ($ch['id'] == $id) {
-            response(1, "success", [$ch]);
+            sendResponse("1", "success", [$ch]);
         }
     }
 
-    response(0, "not found");
+    sendResponse("0", "not_found");
 }
 
-//////////////////////////////////////////////////////
-// ACTION: SEARCH
-//////////////////////////////////////////////////////
-if ($action == "search") {
 
-    if (!isset($_GET['keyword'])) {
-        response(0, "keyword required");
-    }
+//////////////////////////////////////////////////////
+// METHOD: get_search_live
+//////////////////////////////////////////////////////
+if ($method == "get_search_live") {
 
-    $key = strtolower($_GET['keyword']);
+    $key = strtolower($request['search_text'] ?? "");
     $result = [];
 
     foreach ($live_tv as $ch) {
@@ -133,12 +125,11 @@ if ($action == "search") {
         }
     }
 
-    response(1, "success", $result);
+    sendResponse("1", "success", $result);
 }
 
 //////////////////////////////////////////////////////
 // DEFAULT
 //////////////////////////////////////////////////////
-response(0, "unknown_action", []);
-
+sendResponse("0", "invalid_method");
 ?>
