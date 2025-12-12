@@ -61,7 +61,7 @@ if ($data == "get_home") {
 
     $final = [];
 
-    foreach ($tbl_home as $sec) {
+    foreach ($tbl_home["tbl_home_sections"] as $sec) {
         $section_items = [];
         foreach ($sec["channel_ids"] as $id) {
             foreach ($tbl_live as $ch) {
