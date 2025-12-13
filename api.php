@@ -1,52 +1,71 @@
 
 <?php
+/* =========================================================
+   FORCE OUTPUT BUFFER (FIXES HEADER ALREADY SENT ERROR)
+   ========================================================= */
+ob_start();
+
+/* =========================================================
+   HEADERS
+   ========================================================= */
 header("Content-Type: application/json; charset=utf-8");
 header("Access-Control-Allow-Origin: *");
 
-/*-------------------------------------------------
-  COMMON RESPONSE FUNCTION
---------------------------------------------------*/
+/* =========================================================
+   COMMON RESPONSE FUNCTION
+   ========================================================= */
 function sendResponse($arr) {
+    // Clear any accidental output
+    if (ob_get_length()) {
+        ob_clean();
+    }
     echo json_encode(["NEMOSOFTS_APP" => [$arr]], JSON_UNESCAPED_SLASHES);
     exit;
 }
 
-/*-------------------------------------------------
-  LOAD JSON SAFELY
---------------------------------------------------*/
+/* =========================================================
+   SAFE JSON LOADER
+   ========================================================= */
 function loadJson($file, $key = null) {
     if (!file_exists($file)) return [];
-    $data = json_decode(file_get_contents($file), true);
+    $json = file_get_contents($file);
+    if (!$json) return [];
+    $data = json_decode($json, true);
     if (!is_array($data)) return [];
-    return ($key && isset($data[$key])) ? $data[$key] : $data;
+    return ($key && isset($data[$key]) && is_array($data[$key])) ? $data[$key] : $data;
 }
 
-/*-------------------------------------------------
-  LOAD DATA FILES (MATCH YOUR STRUCTURE)
---------------------------------------------------*/
-$tbl_live          = loadJson("data/tbl_live.json", "tbl_live");
-$tbl_category      = loadJson("data/tbl_category.json", "tbl_category");
-$tbl_home_sections = loadJson("data/tbl_home_sections.json", "tbl_home_sections");
-$tbl_settings      = loadJson("data/tbl_settings.json");
-$tbl_users         = loadJson("data/tbl_users.json", "tbl_users");
+/* =========================================================
+   LOAD DATA FILES (MATCH YOUR JSON STRUCTURE)
+   ========================================================= */
+$tbl_live          = loadJson(__DIR__ . "/data/tbl_live.json", "tbl_live");
+$tbl_category      = loadJson(__DIR__ . "/data/tbl_category.json", "tbl_category");
+$tbl_home_sections = loadJson(__DIR__ . "/data/tbl_home_sections.json", "tbl_home_sections");
+$tbl_settings      = loadJson(__DIR__ . "/data/tbl_settings.json");
+$tbl_users         = loadJson(__DIR__ . "/data/tbl_users.json", "tbl_users");
 
-/*-------------------------------------------------
-  READ REQUEST
---------------------------------------------------*/
-if (!isset($_POST["data"])) {
+/* =========================================================
+   READ POST DATA
+   ========================================================= */
+if (empty($_POST["data"])) {
     sendResponse(["success" => "0", "MSG" => "no_data"]);
 }
 
-$req = json_decode(base64_decode($_POST["data"]), true);
+$decoded = base64_decode($_POST["data"], true);
+if ($decoded === false) {
+    sendResponse(["success" => "0", "MSG" => "invalid_base64"]);
+}
+
+$req = json_decode($decoded, true);
 if (!is_array($req)) {
-    sendResponse(["success" => "0", "MSG" => "invalid_request"]);
+    sendResponse(["success" => "0", "MSG" => "invalid_json"]);
 }
 
 $helper = $req["helper_name"] ?? "";
 
-/*-------------------------------------------------
-  APP DETAILS
---------------------------------------------------*/
+/* =========================================================
+   APP DETAILS
+   ========================================================= */
 if ($helper === "get_app_details") {
     sendResponse([
         "success" => "1",
@@ -63,9 +82,9 @@ if ($helper === "get_app_details") {
     ]);
 }
 
-/*-------------------------------------------------
-  HOME API (MOST IMPORTANT)
---------------------------------------------------*/
+/* =========================================================
+   HOME API
+   ========================================================= */
 if ($helper === "get_home") {
 
     $home = [];
@@ -74,7 +93,7 @@ if ($helper === "get_home") {
 
         $list = [];
 
-        if (!empty($section["channel_ids"])) {
+        if (!empty($section["channel_ids"]) && is_array($section["channel_ids"])) {
             foreach ($section["channel_ids"] as $cid) {
                 foreach ($tbl_live as $live) {
                     if (
@@ -102,9 +121,9 @@ if ($helper === "get_home") {
     ]);
 }
 
-/*-------------------------------------------------
-  CATEGORY LIST
---------------------------------------------------*/
+/* =========================================================
+   CATEGORY LIST
+   ========================================================= */
 if ($helper === "cat_list") {
     sendResponse([
         "success" => "1",
@@ -113,9 +132,9 @@ if ($helper === "cat_list") {
     ]);
 }
 
-/*-------------------------------------------------
-  CATEGORY BY ID
---------------------------------------------------*/
+/* =========================================================
+   CATEGORY BY ID
+   ========================================================= */
 if ($helper === "get_cat_by") {
 
     $cid = $req["cat_id"] ?? "";
@@ -138,9 +157,9 @@ if ($helper === "get_cat_by") {
     ]);
 }
 
-/*-------------------------------------------------
-  LIVE DETAILS
---------------------------------------------------*/
+/* =========================================================
+   LIVE DETAILS
+   ========================================================= */
 if ($helper === "get_live_id") {
 
     $id = $req["post_id"] ?? "";
@@ -158,9 +177,9 @@ if ($helper === "get_live_id") {
     sendResponse(["success" => "0", "MSG" => "not_found"]);
 }
 
-/*-------------------------------------------------
-  SEARCH
---------------------------------------------------*/
+/* =========================================================
+   SEARCH
+   ========================================================= */
 if ($helper === "search") {
 
     $text = strtolower($req["search_text"] ?? "");
@@ -182,9 +201,9 @@ if ($helper === "search") {
     ]);
 }
 
-/*-------------------------------------------------
-  LATEST
---------------------------------------------------*/
+/* =========================================================
+   LATEST
+   ========================================================= */
 if ($helper === "latest") {
     sendResponse([
         "success" => "1",
@@ -193,9 +212,9 @@ if ($helper === "latest") {
     ]);
 }
 
-/*-------------------------------------------------
-  TRENDING / MOST VIEWED
---------------------------------------------------*/
+/* =========================================================
+   MOST VIEWED
+   ========================================================= */
 if ($helper === "most_viewed") {
 
     usort($tbl_live, function ($a, $b) {
@@ -209,9 +228,9 @@ if ($helper === "most_viewed") {
     ]);
 }
 
-/*-------------------------------------------------
-  LOGIN (JSON USER FILE)
---------------------------------------------------*/
+/* =========================================================
+   LOGIN
+   ========================================================= */
 if ($helper === "login") {
 
     $email = $req["user_email"] ?? "";
@@ -234,7 +253,7 @@ if ($helper === "login") {
     sendResponse(["success" => "0", "MSG" => "invalid_login"]);
 }
 
-/*-------------------------------------------------
-  DEFAULT
---------------------------------------------------*/
+/* =========================================================
+   UNKNOWN HELPER
+   ========================================================= */
 sendResponse(["success" => "0", "MSG" => "unknown_helper"]);
