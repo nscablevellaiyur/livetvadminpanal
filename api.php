@@ -1,76 +1,133 @@
+
 <?php
 header("Content-Type: application/json; charset=utf-8");
 header("Access-Control-Allow-Origin: *");
 
+/*-------------------------------------------------
+  COMMON RESPONSE FUNCTION
+--------------------------------------------------*/
 function sendResponse($arr) {
-    echo json_encode(["NEMOSOFTS_APP" => [$arr]]);
+    echo json_encode(["NEMOSOFTS_APP" => [$arr]], JSON_UNESCAPED_SLASHES);
     exit;
 }
 
-# Load JSON Files
-$tbl_cat          = json_decode(file_get_contents("data/tbl_category.json"), true);
-$tbl_live         = json_decode(file_get_contents("data/tbl_live.json"), true);
-$tbl_home_sections = json_decode(file_get_contents("data/tbl_home_sections.json"), true);
-$tbl_settings     = json_decode(file_get_contents("data/tbl_settings.json"), true);
-$tbl_users        = json_decode(file_get_contents("data/tbl_users.json"), true);
+/*-------------------------------------------------
+  LOAD JSON SAFELY
+--------------------------------------------------*/
+function loadJson($file, $key = null) {
+    if (!file_exists($file)) return [];
+    $data = json_decode(file_get_contents($file), true);
+    if (!is_array($data)) return [];
+    return ($key && isset($data[$key])) ? $data[$key] : $data;
+}
 
-# Decode incoming request
+/*-------------------------------------------------
+  LOAD DATA FILES (MATCH YOUR STRUCTURE)
+--------------------------------------------------*/
+$tbl_live          = loadJson("data/tbl_live.json", "tbl_live");
+$tbl_category      = loadJson("data/tbl_category.json", "tbl_category");
+$tbl_home_sections = loadJson("data/tbl_home_sections.json", "tbl_home_sections");
+$tbl_settings      = loadJson("data/tbl_settings.json");
+$tbl_users         = loadJson("data/tbl_users.json", "tbl_users");
+
+/*-------------------------------------------------
+  READ REQUEST
+--------------------------------------------------*/
 if (!isset($_POST["data"])) {
     sendResponse(["success" => "0", "MSG" => "no_data"]);
 }
 
 $req = json_decode(base64_decode($_POST["data"]), true);
+if (!is_array($req)) {
+    sendResponse(["success" => "0", "MSG" => "invalid_request"]);
+}
+
 $helper = $req["helper_name"] ?? "";
 
-# -------------------------------------------------------------------
-# APP DETAILS / SETTINGS
-# -------------------------------------------------------------------
-if ($helper == "get_app_details") {
+/*-------------------------------------------------
+  APP DETAILS
+--------------------------------------------------*/
+if ($helper === "get_app_details") {
     sendResponse([
         "success" => "1",
         "MSG" => "success",
-        "app_details" => $tbl_settings,
-        "home_sections" => $tbl_home_sections
+        "app_name" => $tbl_settings["app_name"] ?? "",
+        "app_logo" => $tbl_settings["app_logo"] ?? "",
+        "app_email" => $tbl_settings["app_email"] ?? "",
+        "app_author" => $tbl_settings["app_author"] ?? "",
+        "app_contact" => $tbl_settings["app_contact"] ?? "",
+        "app_website" => $tbl_settings["app_website"] ?? "",
+        "app_description" => $tbl_settings["app_description"] ?? "",
+        "app_developed_by" => $tbl_settings["app_developed_by"] ?? "",
+        "ad_status" => "false"
     ]);
 }
 
-# -------------------------------------------------------------------
-# HOME PAGE API
-# -------------------------------------------------------------------
-if ($helper == "get_home") {
+/*-------------------------------------------------
+  HOME API (MOST IMPORTANT)
+--------------------------------------------------*/
+if ($helper === "get_home") {
+
+    $home = [];
+
+    foreach ($tbl_home_sections as $section) {
+
+        $list = [];
+
+        if (!empty($section["channel_ids"])) {
+            foreach ($section["channel_ids"] as $cid) {
+                foreach ($tbl_live as $live) {
+                    if (
+                        isset($live["id"], $live["status"]) &&
+                        $live["id"] == $cid &&
+                        $live["status"] === "1"
+                    ) {
+                        $list[] = $live;
+                    }
+                }
+            }
+        }
+
+        $home[] = [
+            "type"  => $section["type"] ?? "live",
+            "title" => $section["title"] ?? "",
+            "list"  => $list
+        ];
+    }
 
     sendResponse([
         "success" => "1",
         "MSG" => "success",
-        "home_sections" => $tbl_home_sections,
-        "category" => $tbl_cat,
-        "live" => $tbl_live
+        "home" => $home
     ]);
 }
 
-# -------------------------------------------------------------------
-# CATEGORY LIST
-# -------------------------------------------------------------------
-if ($helper == "cat_list") {
-
+/*-------------------------------------------------
+  CATEGORY LIST
+--------------------------------------------------*/
+if ($helper === "cat_list") {
     sendResponse([
         "success" => "1",
         "MSG" => "success",
-        "category" => $tbl_cat
+        "category" => $tbl_category
     ]);
 }
 
-# -------------------------------------------------------------------
-# CATEGORY BY ID
-# -------------------------------------------------------------------
-if ($helper == "get_cat_by") {
+/*-------------------------------------------------
+  CATEGORY BY ID
+--------------------------------------------------*/
+if ($helper === "get_cat_by") {
 
     $cid = $req["cat_id"] ?? "";
-
     $result = [];
-    foreach ($tbl_live as $row) {
-        if ($row["cat_id"] == $cid && $row["status"] == "1") {
-            $result[] = $row;
+
+    foreach ($tbl_live as $live) {
+        if (
+            isset($live["cat_id"], $live["status"]) &&
+            $live["cat_id"] == $cid &&
+            $live["status"] === "1"
+        ) {
+            $result[] = $live;
         }
     }
 
@@ -81,19 +138,19 @@ if ($helper == "get_cat_by") {
     ]);
 }
 
-# -------------------------------------------------------------------
-# LIVE TV DETAILS
-# -------------------------------------------------------------------
-if ($helper == "get_live_id") {
+/*-------------------------------------------------
+  LIVE DETAILS
+--------------------------------------------------*/
+if ($helper === "get_live_id") {
 
     $id = $req["post_id"] ?? "";
 
-    foreach ($tbl_live as $row) {
-        if ($row["id"] == $id) {
+    foreach ($tbl_live as $live) {
+        if (isset($live["id"]) && $live["id"] == $id) {
             sendResponse([
                 "success" => "1",
                 "MSG" => "success",
-                "live" => $row
+                "live_data" => [$live]
             ]);
         }
     }
@@ -101,17 +158,20 @@ if ($helper == "get_live_id") {
     sendResponse(["success" => "0", "MSG" => "not_found"]);
 }
 
-# -------------------------------------------------------------------
-# SEARCH
-# -------------------------------------------------------------------
-if ($helper == "search") {
+/*-------------------------------------------------
+  SEARCH
+--------------------------------------------------*/
+if ($helper === "search") {
 
     $text = strtolower($req["search_text"] ?? "");
     $result = [];
 
-    foreach ($tbl_live as $row) {
-        if (strpos(strtolower($row["title"]), $text) !== false) {
-            $result[] = $row;
+    foreach ($tbl_live as $live) {
+        if (
+            isset($live["live_title"]) &&
+            strpos(strtolower($live["live_title"]), $text) !== false
+        ) {
+            $result[] = $live;
         }
     }
 
@@ -122,10 +182,10 @@ if ($helper == "search") {
     ]);
 }
 
-# -------------------------------------------------------------------
-# LATEST
-# -------------------------------------------------------------------
-if ($helper == "latest") {
+/*-------------------------------------------------
+  LATEST
+--------------------------------------------------*/
+if ($helper === "latest") {
     sendResponse([
         "success" => "1",
         "MSG" => "success",
@@ -133,11 +193,14 @@ if ($helper == "latest") {
     ]);
 }
 
-# -------------------------------------------------------------------
-# MOST VIEWED
-# -------------------------------------------------------------------
-if ($helper == "most_viewed") {
-    usort($tbl_live, fn($a, $b) => $b["views"] <=> $a["views"]);
+/*-------------------------------------------------
+  TRENDING / MOST VIEWED
+--------------------------------------------------*/
+if ($helper === "most_viewed") {
+
+    usort($tbl_live, function ($a, $b) {
+        return (int)($b["total_views"] ?? 0) <=> (int)($a["total_views"] ?? 0);
+    });
 
     sendResponse([
         "success" => "1",
@@ -146,16 +209,20 @@ if ($helper == "most_viewed") {
     ]);
 }
 
-# -------------------------------------------------------------------
-# LOGIN (Dummy JSON login)
-# -------------------------------------------------------------------
-if ($helper == "login") {
+/*-------------------------------------------------
+  LOGIN (JSON USER FILE)
+--------------------------------------------------*/
+if ($helper === "login") {
 
     $email = $req["user_email"] ?? "";
     $pass  = $req["user_password"] ?? "";
 
     foreach ($tbl_users as $u) {
-        if ($u["email"] == $email && $u["password"] == $pass) {
+        if (
+            isset($u["user_email"], $u["user_password"]) &&
+            $u["user_email"] === $email &&
+            $u["user_password"] === $pass
+        ) {
             sendResponse([
                 "success" => "1",
                 "MSG" => "success",
@@ -167,8 +234,7 @@ if ($helper == "login") {
     sendResponse(["success" => "0", "MSG" => "invalid_login"]);
 }
 
-# -------------------------------------------------------------------
-# DEFAULT: UNKNOWN HELPER
-# -------------------------------------------------------------------
+/*-------------------------------------------------
+  DEFAULT
+--------------------------------------------------*/
 sendResponse(["success" => "0", "MSG" => "unknown_helper"]);
-?>
